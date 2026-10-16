@@ -14,6 +14,7 @@ from database.connection import (
 
 from routes.admin_routes import router as admin_router
 from routes.employee_routes import router as employee_router
+from routes.document_routes import router as document_router
 
 from utils.security import hash_password
 
@@ -85,6 +86,7 @@ app = FastAPI(
 
 app.include_router(admin_router)
 app.include_router(employee_router)
+app.include_router(document_router)
 
 
 @app.get("/")
