@@ -1,8 +1,11 @@
 import os
 import uuid
 
+from fastapi import FastAPI
+
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from fastapi.middleware.cors import CORSMiddleware
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -18,10 +21,35 @@ from routes.document_routes import router as document_router
 
 from utils.security import hash_password
 
+#------------------------------------------------------------------------------------------------
 
 load_dotenv()
 
+#------------------------------------------------------------------------------------------------
+app = FastAPI(
+    title="Admin and Employee Management API",
+    version="1.0.0",
+)
+#------------------------------------------------------------------------------------------------
 
+app.include_router(admin_router)
+app.include_router(employee_router)
+app.include_router(document_router)
+
+#------------------------------------------------------------------------------------------------
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+        ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+#------------------------------------------------------------------------------------------------
 def create_initial_admin():
     """Create the first admin if no admin account exists."""
 
@@ -69,6 +97,7 @@ def create_initial_admin():
 
     print("Initial admin created successfully.")
 
+#------------------------------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -78,15 +107,9 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(
-    title="Admin and Employee Management API",
-    version="1.0.0",
-    lifespan=lifespan,
-)
 
-app.include_router(admin_router)
-app.include_router(employee_router)
-app.include_router(document_router)
+
+
 
 
 @app.get("/")

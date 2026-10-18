@@ -8,11 +8,11 @@ from pydantic import (
 #--------------------------------------------------------------------------------------------
 
 # Allowed employee roles
-EmployeeRole = Literal["developer", "tester" , "devops" , "hr" , "finance"]
+EmployeeRole = Literal["developer", "tester", "devops", "hr", "finance", "employee"]
 
 # Allowed Departments
-EmployeeDepartment = Literal [
-    "IT", "HR", "Finance", "Support", 
+EmployeeDepartment = Literal[
+    "IT", "HR", "Finance", "Support", "Operations",
 ]
 
 # Allowed Account Status
@@ -25,11 +25,15 @@ class EmployeeCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name : str=Field(min_length=2, max_length=10)
+    name : str=Field(min_length=2, max_length=100)
 
     email : EmailStr
 
     password : SecretStr = Field(min_length=3, max_length=16)
+
+    department : EmployeeDepartment
+
+    role : EmployeeRole
 
 #--------------------------------------------------------------------------------------------
 
