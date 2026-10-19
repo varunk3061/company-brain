@@ -1,7 +1,5 @@
-import StatCard from "@/components/admin/StatCard";
-import ActivityTable from "@/components/admin/ActivityTable";
 import SyncButton from "@/components/admin/SyncButton";
-import { ACTIVITY, STATS } from "@/components/admin/data";
+import DashboardOverview from "@/components/admin/DashboardOverview";
 
 export default function AdminOverviewPage() {
   return (
@@ -16,13 +14,7 @@ export default function AdminOverviewPage() {
         <SyncButton />
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {STATS.map((s) => (
-          <StatCard key={s.id} stat={s} />
-        ))}
-      </div>
-
-      <ActivityTable rows={ACTIVITY} />
+      <DashboardOverview />
     </div>
   );
 }

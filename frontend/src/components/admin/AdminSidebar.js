@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FolderIcon, GridIcon, ShieldIcon, UsersIcon } from "./icons";
-import { NAV_ITEMS, VECTOR_DB } from "./data";
+import { NAV_ITEMS } from "./data";
 
 const ICONS = {
   grid: GridIcon,
@@ -53,13 +53,6 @@ export default function AdminSidebar({ open, onNavigate }) {
           );
         })}
       </nav>
-
-      <div className="border-t border-slate-100 p-4">
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3.5">
-          <p className="text-sm font-semibold text-indigo-700">{VECTOR_DB.name}</p>
-          <p className="mt-0.5 text-xs text-slate-500">{VECTOR_DB.detail}</p>
-        </div>
-      </div>
     </aside>
   );
 }

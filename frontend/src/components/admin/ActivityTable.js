@@ -10,6 +10,10 @@ const EVENT_ICONS = {
 const DEPT_TONES = {
   HR: "bg-violet-50 text-violet-600",
   Engineering: "bg-sky-50 text-sky-600",
+  IT: "bg-sky-50 text-sky-600",
+  Finance: "bg-amber-50 text-amber-700",
+  Support: "bg-rose-50 text-rose-600",
+  Operations: "bg-teal-50 text-teal-700",
   System: "bg-slate-100 text-slate-600",
 };
 
@@ -17,12 +21,14 @@ const STATUS_TONES = {
   Indexed: "bg-emerald-50 text-emerald-700",
   Success: "bg-emerald-50 text-emerald-700",
   Completed: "bg-emerald-50 text-emerald-700",
+  Created: "bg-emerald-50 text-emerald-700",
+  Registered: "bg-emerald-50 text-emerald-700",
   Failed: "bg-red-50 text-red-700",
 };
 
 const COLUMNS = ["Event / Action", "Actor / User", "Department", "Status", "Timestamp"];
 
-export default function ActivityTable({ rows }) {
+export default function ActivityTable({ rows = [], emptyMessage = "No recent activity yet." }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-4 px-6 py-5">
@@ -47,6 +53,13 @@ export default function ActivityTable({ rows }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={COLUMNS.length} className="px-6 py-10 text-center text-sm text-slate-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
             {rows.map((r) => {
               const { Icon, tone } = EVENT_ICONS[r.type] ?? EVENT_ICONS.sync;
               return (
@@ -54,21 +67,21 @@ export default function ActivityTable({ rows }) {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3 text-sm text-slate-800">
                       <Icon className={`h-4.5 w-4.5 shrink-0 ${tone}`} />
-                      {r.event}
+                      {r.event || "-"}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-700">{r.actor}</td>
+                  <td className="px-6 py-4 text-sm text-slate-700">{r.actor || "-"}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${DEPT_TONES[r.dept] ?? DEPT_TONES.System}`}>
-                      {r.dept}
+                      {r.dept || "-"}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_TONES[r.status] ?? STATUS_TONES.Success}`}>
-                      {r.status}
+                      {r.status || "-"}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-400">{r.time}</td>
+                  <td className="px-6 py-4 text-sm text-slate-400">{r.time || "-"}</td>
                 </tr>
               );
             })}

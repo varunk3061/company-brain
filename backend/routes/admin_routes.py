@@ -10,6 +10,8 @@ from models.employee_model import (
     EmployeeRole, EmployeeStatus
     )
 
+from services.dashboard_service import get_dashboard_data
+
 from services.employee_service import (
     create_employee, list_employees, get_employee, update_employee, delete_employee
 )
@@ -53,6 +55,28 @@ def admin_login(login_data: AdminLoginRequest):
         "token_type" : "bearer",
         "expires_in" : ACCESS_TOKEN_EXPIRE_MINUTES * 60
     }
+
+#-------------------------------------------------------------------------------------
+
+@router.get("/admin/me", tags=["Admin"])
+def get_admin_profile(admin: dict = Depends(get_current_admin)):
+    """Return the currently logged-in admin's profile."""
+
+    return {
+        "admin_uuid": admin["admin_uuid"],
+        "name": admin.get("name", ""),
+        "email": admin.get("email", ""),
+        "role": admin.get("role", "admin"),
+        "department": admin.get("department"),  # may be None for the .env-seeded admin
+    }
+
+#-------------------------------------------------------------------------------------
+
+@router.get("/admin/dashboard", tags=["Admin"])
+def get_admin_dashboard(admin: dict = Depends(get_current_admin)):
+    """Return real stats and recent activity for the admin overview page."""
+
+    return get_dashboard_data()
 
 #-------------------------------------------------------------------------------------
 

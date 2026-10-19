@@ -1,14 +1,50 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import AdminSidebar from "./AdminSidebar";
 import { BrainIcon, ChevronDownIcon, LogOutIcon, MenuIcon } from "./icons";
-import { ADMIN_USER } from "./data";
+import { getAdminProfile } from "@/services/authService";
+
+function getInitials(name = "") {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function formatRole(role = "") {
+  return role === "admin" ? "Administrator" : role.charAt(0).toUpperCase() + role.slice(1);
+}
 
 export default function AdminShell({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const router = useRouter();
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    getAdminProfile()
+      .then(setProfile)
+      .catch((err) => {
+        if (err.message === "NOT_AUTHENTICATED") {
+          localStorage.removeItem("access_token");
+          sessionStorage.removeItem("access_token");
+          router.replace("/login");
+        }
+      });
+  }, [router]);
+
+  const handleSignOut = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user_role");
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("user_role");
+    router.replace("/login");
+  };
 
   useEffect(() => {
     const onClick = (e) => {
@@ -49,11 +85,17 @@ export default function AdminShell({ children }) {
             className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
-              {ADMIN_USER.initials}
+              {profile ? getInitials(profile.name) : "…"}
             </span>
             <span className="hidden text-left leading-tight sm:block">
-              <span className="block text-sm font-semibold text-slate-800">{ADMIN_USER.name}</span>
-              <span className="block text-xs text-slate-500">{ADMIN_USER.role}</span>
+              <span className="block text-sm font-semibold text-slate-800">
+                {profile?.name ?? "Loading…"}
+              </span>
+              <span className="block text-xs text-slate-500">
+                {profile
+                  ? [formatRole(profile.role), profile.department].filter(Boolean).join(" • ")
+                  : ""}
+              </span>
             </span>
             <ChevronDownIcon className="h-4 w-4 text-slate-400" />
           </button>
@@ -63,14 +105,15 @@ export default function AdminShell({ children }) {
               role="menu"
               className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
             >
-              <a
-                href="/login"
+              <button
+                type="button"
                 role="menuitem"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
                 <LogOutIcon className="h-4 w-4 text-slate-500" />
                 Sign out
-              </a>
+              </button>
             </div>
           )}
         </div>
