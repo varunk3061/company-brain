@@ -7,14 +7,14 @@ const ROLES = [
   {
     id: "employee",
     label: "Employee Access",
-    emailLabel: "Corporate email",
-    placeholder: "name@company.com",
+    emailLabel: "Email",
+    placeholder: "email",
   },
   {
     id: "admin",
     label: "Admin Portal",
-    emailLabel: "Admin email",
-    placeholder: "admin@company.com",
+    emailLabel: "Email",
+    placeholder: "email",
   },
 ];
 
@@ -122,9 +122,9 @@ export default function LoginCard() {
         <h1 className="mt-6 text-2xl font-bold tracking-tight text-slate-900">
           The Company Brain
         </h1>
-        <p className="mt-1.5 text-sm text-slate-500">
+        {/* <p className="mt-1.5 text-sm text-slate-500">
           Enterprise Knowledge Retrieval &amp; RAG System
-        </p>
+        </p> */}
       </div>
 
       {/* Role toggle */}
@@ -140,7 +140,7 @@ export default function LoginCard() {
             role="tab"
             aria-selected={role === r.id}
             onClick={() => switchRole(r.id)}
-            className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+            className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer ${
               role === r.id
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-500 hover:text-slate-700"
@@ -275,8 +275,9 @@ export default function LoginCard() {
         </div>
 
         {/* Remember + forgot */}
-        <div className="flex items-center justify-between">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+        {/* for future use */}
+        {/* <div className="flex items-center justify-between"> */}
+          {/* <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
             <input
               type="checkbox"
               checked={remember}
@@ -284,20 +285,20 @@ export default function LoginCard() {
               className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
             Remember this device
-          </label>
-          <a
+          </label> */}
+          {/* <a
             href="/forgot-password"
             className="text-sm font-medium text-indigo-600 hover:text-indigo-700 focus:outline-none focus-visible:underline"
           >
             Forgot password?
-          </a>
-        </div>
+          </a> */}
+        {/* </div> */}
 
         {/* Submit */}
         <button
           type="submit"
           disabled={loading}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-70"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer"
         >
           {loading ? (
             <>
@@ -326,7 +327,7 @@ export default function LoginCard() {
             </>
           ) : (
             <>
-              {role === "admin" ? "Sign in as admin" : "Sign in"}
+              Sign in 
               <svg
                 viewBox="0 0 24 24"
                 className="h-4 w-4"
