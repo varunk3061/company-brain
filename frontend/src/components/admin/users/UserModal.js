@@ -258,7 +258,7 @@ export default function UserModal({
               htmlFor="emp-email"
               className="mb-1.5 block text-sm font-medium text-slate-700"
             >
-              Corporate email {editing && <span className="text-xs text-slate-400 font-normal">(cannot be changed)</span>}
+              Email {editing && <span className="text-xs text-slate-400 font-normal">(cannot be changed)</span>}
             </label>
 
             <input
@@ -290,7 +290,7 @@ export default function UserModal({
                 htmlFor="emp-password"
                 className="mb-1.5 block text-sm font-medium text-slate-700"
               >
-                Temporary Password
+                Password
               </label>
 
               <input

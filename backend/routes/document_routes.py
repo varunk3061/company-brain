@@ -8,7 +8,8 @@ from models.document_model import (
 from services.document_service import (
     scan_pdf_folder,
     list_documents,
-    update_document_roles
+    update_document_roles,
+    delete_document
 )
 
 # IMPORTANT:
@@ -54,3 +55,10 @@ def update_permissions(
     )
 
 #----------------------------------------------------------------------------------------------------------------
+
+@router.delete("/{document_uuid}")
+def remove_document(
+    document_uuid: str,
+    admin=Depends(get_current_admin)
+):
+    return delete_document(document_uuid)

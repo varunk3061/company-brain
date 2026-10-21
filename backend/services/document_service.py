@@ -218,3 +218,24 @@ def update_document_roles( document_uuid: str, allowed_roles: list[str] ):
             "allowed_roles": 1
         }
     )
+
+#-----------------------------------------------------------------------------------------------------------
+
+def delete_document(document_uuid: str):
+    """Delete a registered document using its UUID."""
+
+    result = documents_collection.delete_one(
+        {"document_uuid": document_uuid}
+    )
+
+    # Return 404 if no document matched the UUID.
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found."
+        )
+
+    return {
+        "message": "Document deleted successfully.",
+        "document_uuid": document_uuid
+    }

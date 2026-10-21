@@ -20,7 +20,7 @@ export default function AdminSidebar({ open, onNavigate }) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-30 flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white pt-[72px] transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:pt-0 ${
+      className={`fixed inset-y-0 left-0 z-30 flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white pt-18 transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:pt-0 ${
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
@@ -47,7 +47,7 @@ export default function AdminSidebar({ open, onNavigate }) {
                   : "font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
-              <Icon className="h-[18px] w-[18px]" />
+              <Icon className="h-4.5 w-4.5" />
               {item.label}
             </Link>
           );

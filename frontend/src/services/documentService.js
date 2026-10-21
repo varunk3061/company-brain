@@ -79,3 +79,30 @@ export async function updateDocumentPermissions(documentUuid, allowedRoles) {
 
   return data;
 }
+
+// 4. Delete a registered document from MongoDB
+export async function deleteDocument(documentUuid) {
+  const token = getAdminToken();
+
+  const response = await fetch(
+    `${BASE_URL}/api/documents/${documentUuid}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      data.detail ||
+      data.error ||
+      `Unable to delete document (${response.status}).`
+    );
+  }
+
+  return data;
+}

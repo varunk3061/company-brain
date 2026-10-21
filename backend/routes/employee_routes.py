@@ -11,12 +11,14 @@ from utils.auth import (
 )
 from utils.security import verify_password
 
+#------------------------------------------------------------------------------------------------------------------------
 
 router = APIRouter(
     prefix="/employee",
     tags=["Employee"],
 )
 
+#------------------------------------------------------------------------------------------------------------------------
 
 @router.post("/login")
 def employee_login(login_data: EmployeeLoginRequest):
@@ -51,6 +53,7 @@ def employee_login(login_data: EmployeeLoginRequest):
         "token_type": "bearer",
     }
 
+#------------------------------------------------------------------------------------------------------------------------
 
 @router.get(
     "/me",
@@ -71,3 +74,5 @@ def get_my_profile(
         "created_at": employee["created_at"],
         "updated_at": employee["updated_at"],
     }
+
+#------------------------------------------------------------------------------------------------------------------------

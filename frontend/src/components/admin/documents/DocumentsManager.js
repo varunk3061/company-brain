@@ -13,6 +13,7 @@ import {
   scanFolder,
   getDocuments,
   updateDocumentPermissions,
+  deleteDocument,
 } from "@/services/documentService";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -123,11 +124,22 @@ export default function DocumentsManager() {
   const [docs, setDocs] = useState([]);
   // drafts[id] exists only while that row is being edited
   const [drafts, setDrafts] = useState({});
+  // for edit modal
+  const [selectedDoc, setSelectedDoc] = useState(null);
 
   const [path, setPath] = useState("");
   const [pathError, setPathError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submittedPath, setSubmittedPath] = useState("");
+
+  // Document selected for deletion
+  const [deleteDoc, setDeleteDoc] = useState(null);
+
+  // Tracks whether the delete API request is running
+  const [deleting, setDeleting] = useState(false);
+
+  // Error message shown inside the delete modal
+  const [deleteError, setDeleteError] = useState("");
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -151,6 +163,44 @@ export default function DocumentsManager() {
     loadDocuments();
   }, [loadDocuments]);
 
+  // Open the delete confirmation modal
+  const openDeleteModal = (doc) => {
+    setDeleteDoc(doc);
+    setDeleteError("");
+  };
+
+  // Close the delete confirmation modal
+  const closeDeleteModal = () => {
+    if (deleting) return;
+
+    setDeleteDoc(null);
+    setDeleteError("");
+  };
+
+  // Delete the document after confirmation
+  const handleDelete = async () => {
+    if (!deleteDoc) return;
+
+    setDeleting(true);
+    setDeleteError("");
+
+    try {
+      // Call the backend delete API
+      await deleteDocument(deleteDoc.id);
+
+      // Remove the deleted document from the table
+      setDocs((prev) => prev.filter((d) => d.id !== deleteDoc.id));
+
+      // Close the modal after successful deletion
+      setDeleteDoc(null);
+    } catch (err) {
+      // Display the error inside the modal
+      setDeleteError(err.message || "Failed to delete document.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handlePathSubmit = async (e) => {
     e.preventDefault();
     const value = path.trim();
@@ -167,7 +217,7 @@ export default function DocumentsManager() {
       const result = await scanFolder(value);
       await loadDocuments();
       setSubmittedPath(
-        `Scanned successfully: ${result.created_count} new, ${result.existing_count} existing.`
+        `Scanned successfully: ${result.created_count} new, ${result.existing_count} existing.`,
       );
       setPath("");
     } catch (err) {
@@ -177,8 +227,22 @@ export default function DocumentsManager() {
     }
   };
 
-  const startEdit = (doc) =>
+  const startEdit = (doc) => {
     setDrafts((prev) => ({ ...prev, [doc.id]: [...doc.roles] }));
+    setSelectedDoc(doc);
+  };
+
+  const closeModal = () => {
+    if (selectedDoc) {
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[selectedDoc.id];
+        return next;
+      });
+    }
+
+    setSelectedDoc(null);
+  };
 
   const setDraft = (id, roles) =>
     setDrafts((prev) => ({ ...prev, [id]: roles }));
@@ -245,7 +309,7 @@ export default function DocumentsManager() {
             <button
               type="submit"
               disabled={submitting}
-              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer"
             >
               {submitting && <RefreshIcon className="h-4 w-4 animate-spin" />}
               {submitting ? "Submitting..." : "Submit"}
@@ -330,12 +394,7 @@ export default function DocumentsManager() {
                       {d.updated}
                     </td>
                     <td className="px-6 py-4">
-                      {editing ? (
-                        <RoleSelect
-                          value={draft}
-                          onChange={(roles) => setDraft(d.id, roles)}
-                        />
-                      ) : d.roles.length > 0 ? (
+                      {d.roles.length > 0 ? (
                         <div className="flex max-w-xs flex-wrap gap-1.5">
                           {d.roles.map((r) => (
                             <RoleTag key={r}>{r}</RoleTag>
@@ -349,29 +408,28 @@ export default function DocumentsManager() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-4">
-                        <button
+                        {/* <button
                           type="button"
                           disabled
                           title="Preview is not available yet"
                           className={`${linkBtn} cursor-not-allowed text-slate-300`}
                         >
                           Preview
-                        </button>
+                        </button> */}
                         <button
                           type="button"
                           onClick={() => startEdit(d)}
-                          disabled={editing}
-                          className={`${linkBtn} text-indigo-600 hover:text-indigo-700 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:text-slate-300`}
+                          // disabled={editing}
+                          className={`${linkBtn} text-indigo-600 hover:text-indigo-700 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:text-slate-300 cursor-pointer`}
                         >
                           Edit
                         </button>
                         <button
                           type="button"
-                          onClick={() => submitRoles(d.id)}
-                          disabled={!editing}
-                          className="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          onClick={() => openDeleteModal(d)}
+                          className={`${linkBtn} text-red-400 hover:text-red-700 cursor-pointer`}
                         >
-                          Submit
+                          Delete
                         </button>
                       </div>
                     </td>
@@ -382,6 +440,180 @@ export default function DocumentsManager() {
           </table>
         </div>
       </section>
+
+      {selectedDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-document-title"
+            className="flex h-95 w-full max-w-lg flex-col rounded-2xl bg-white p-6 shadow-xl"
+          >
+            {/* Modal header */}
+            <div className="mb-5 flex items-center justify-between">
+              <h2
+                id="edit-document-title"
+                className="text-lg font-semibold text-slate-900"
+              >
+                Edit Document Permissions
+              </h2>
+
+              <button
+                type="button"
+                onClick={closeModal}
+                aria-label="Close modal"
+                className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Document name */}
+            {/* <p className="mb-2 text-sm text-slate-500">
+              Document: {selectedDoc.title}
+            </p> */}
+
+            {/* Role selector */}
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Allowed User Roles
+            </label>
+
+            <div className="min-h-0 flex-1">
+              <RoleSelect
+                value={drafts[selectedDoc.id] || []}
+                onChange={(roles) => setDraft(selectedDoc.id, roles)}
+              />
+            </div>
+
+            {/* Modal footer */}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await submitRoles(selectedDoc.id);
+                  setSelectedDoc(null);
+                }}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 cursor-pointer"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteDoc && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            // Close only when the backdrop itself is clicked
+            if (e.target === e.currentTarget) {
+              closeDeleteModal();
+            }
+          }}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-document-title"
+            aria-describedby="delete-document-description"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+          >
+            {/* Modal Header */}
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100">
+                <svg
+                  className="h-6 w-6 text-red-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 9v4m0 4h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z"
+                  />
+                </svg>
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h2
+                  id="delete-document-title"
+                  className="text-lg font-semibold text-slate-900"
+                >
+                  Delete Document
+                </h2>
+
+                <p
+                  id="delete-document-description"
+                  className="mt-2 text-sm leading-6 text-slate-500"
+                >
+                  Are you sure you want to delete{" "}
+                  <span className="wrap-break-words font-semibold text-slate-800">
+                    "{deleteDoc.title}"
+                  </span>
+                  ? This action cannot be undone.
+                </p>
+              </div>
+
+              {/* Close Icon */}
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={deleting}
+                aria-label="Close delete modal"
+                className="rounded-lg px-2 py-1 text-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {deleteError && (
+              <p
+                role="alert"
+                className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600"
+              >
+                {deleteError}
+              </p>
+            )}
+
+            {/* Modal Footer */}
+            <div className="mt-7 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={deleting}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deleting && <RefreshIcon className="h-4 w-4 animate-spin" />}
+
+                {deleting ? "Deleting..." : "Delete Document"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -70,6 +70,7 @@ export async function createEmployee(employeeData) {
 
 //-----------------------------------------------------------------------------------------
 
+// GET all employee
 export async function getEmployees() {
   const token =
     localStorage.getItem("access_token") ||
@@ -99,6 +100,7 @@ export async function getEmployees() {
 
 //-----------------------------------------------------------------------------------------
 
+// Updating existing employee using PUT
 export async function updateEmployee(employeeUuid, updateData) {
   const token =
     localStorage.getItem("access_token") ||
@@ -125,6 +127,34 @@ export async function updateEmployee(employeeUuid, updateData) {
         ? data.detail
         : `Unable to update employee (${response.status}).`
     );
+  }
+
+  return data;
+}
+
+//-----------------------------------------------------------------------------------------
+
+export async function deleteEmployee(employeeUuid) {
+  const url = `${BASE_URL}/employees/${employeeUuid}`;
+
+  console.log("Delete URL:", url);
+  console.log("Employee UUID:", employeeUuid);
+
+  const token = localStorage.getItem("access_token");
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  console.log("Delete status:", response.status);
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Unable to delete employee.");
   }
 
   return data;

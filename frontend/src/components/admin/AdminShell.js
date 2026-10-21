@@ -57,7 +57,7 @@ export default function AdminShell({ children }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-white text-slate-900">
       {/* Header */}
-      <header className="relative z-40 flex h-[72px] shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
+      <header className="relative z-40 flex h-18 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -97,7 +97,7 @@ export default function AdminShell({ children }) {
                   : ""}
               </span>
             </span>
-            <ChevronDownIcon className="h-4 w-4 text-slate-400" />
+            <ChevronDownIcon className="h-4 w-4 text-slate-400 cursor-pointer" />
           </button>
 
           {menuOpen && (
@@ -109,7 +109,7 @@ export default function AdminShell({ children }) {
                 type="button"
                 role="menuitem"
                 onClick={handleSignOut}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 <LogOutIcon className="h-4 w-4 text-slate-500" />
                 Sign out

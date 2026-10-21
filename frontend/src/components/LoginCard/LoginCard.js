@@ -235,12 +235,12 @@ export default function LoginCard() {
               type="button"
               onClick={() => setShowPassword((s) => !s)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer"
             >
               {showPassword ? (
                 <svg
                   viewBox="0 0 24 24"
-                  className="h-4.5 w-4.5"
+                  className="h-4.5 w-4.5 cursor-pointer" 
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"
@@ -255,7 +255,7 @@ export default function LoginCard() {
               ) : (
                 <svg
                   viewBox="0 0 24 24"
-                  className="h-4.5 w-4.5"
+                  className="h-4.5 w-4.5 cursor-pointer"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"

@@ -32,7 +32,7 @@ export default function StatCard({ stat }) {
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium text-slate-600">{stat.label}</p>
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${ICON_TONES[stat.iconTone]}`}>
-          <Icon className="h-[18px] w-[18px]" />
+          <Icon className="h-4.5 w-4.5" />
         </span>
       </div>
       <p className="mt-5 text-3xl font-bold tracking-tight text-slate-900">{stat.value}</p>
