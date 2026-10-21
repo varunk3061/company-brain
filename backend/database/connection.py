@@ -26,7 +26,11 @@ db = client[DATABASE_NAME]
 # Select the employee collection
 employees_collection = db["employee"]
 
+# Select the admin collection
 admins_collection = db["admins"]
+
+# Select the document collection
+documents_collection = db["documents"]
 
 #----------------------------------------------------------------------------------------------------
 

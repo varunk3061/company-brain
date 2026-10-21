@@ -27,7 +27,7 @@ def create_admin_service(admin_data):
         "admin_uuid": str(uuid4()),
         "name": admin_data.name,
         "email": admin_data.email.strip().lower(),
-        "password": hash_password(admin_data.password),
+        "password_hash": hash_password(admin_data.password),
         "role": "admin",
         "department": admin_data.department,
         "isActive": True,

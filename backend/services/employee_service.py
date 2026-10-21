@@ -47,6 +47,18 @@ def create_employee(employee_data: EmployeeCreate) -> dict:
             status_code=400, detail="Password must not exceed 72 UTF-8 bytes."
         )
 
+     # Check whether the email is already registered.
+    existing_employee = employees_collection.find_one(
+        {"email": email},
+        {"_id": 1},
+    )
+
+    if existing_employee:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An employee with this email already exists.",
+        )
+
     now = get_current_time()
 
     employee = {
@@ -54,8 +66,8 @@ def create_employee(employee_data: EmployeeCreate) -> dict:
         "name" : employee_data.name.strip(),
         "email" : email,
         "password_hash" : hash_password(password),
-        "department" : "Operations",
-        "role" : "employee",
+        "department" : employee_data.department,
+        "role" : employee_data.role,
         "status" : "active",
         "created_at" : now,
         "updated_at" : now,

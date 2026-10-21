@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="820" viewBox="0 0 1800 820">
+<rect width="1800" height="820" fill="#f5f7fc"/>
+<style>text{font-family:Arial,sans-serif}.title{font-size:32px;font-weight:bold;fill:#142443}.sub{font-size:18px;fill:#53627a}.dept{font-size:20px;font-weight:bold;fill:white}.role{font-size:16px;fill:#25354d}.line{fill:none;stroke:#8b9bb5;stroke-width:3}</style>
+<text x="900" y="62" text-anchor="middle" class="title">Nexora Technologies — Organisation Structure</text>
+<text x="900" y="98" text-anchor="middle" class="sub">Illustrative product-based software company</text>
+<rect x="735" y="138" width="330" height="82" rx="14" fill="#142443"/>
+<text x="900" y="172" text-anchor="middle" class="dept">CEO / Admin</text>
+<text x="900" y="198" text-anchor="middle" fill="#d6e2f5" font-size="15">Company leadership / system administration</text>
+<path class="line" d="M900 220 V265 M180 265 H1620"/>
+<path class="line" d="M180 265 V300"/>
+<rect x="25" y="300" width="310" height="64" rx="10" fill="#3259a5"/>
+<text x="180" y="339" text-anchor="middle" class="dept">Human Resources (HR)</text>
+<path class="line" d="M180 364 V390 H39 V650"/>
+<path class="line" d="M39 422 H55"/>
+<rect x="55" y="398" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="195" y="430" text-anchor="middle" class="role">Talent Acquisition Specialist</text>
+<path class="line" d="M39 498 H55"/>
+<rect x="55" y="474" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="195" y="506" text-anchor="middle" class="role">HR Generalist</text>
+<path class="line" d="M39 574 H55"/>
+<rect x="55" y="550" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="195" y="582" text-anchor="middle" class="role">HR Operations Specialist</text>
+<path class="line" d="M39 650 H55"/>
+<rect x="55" y="626" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="195" y="658" text-anchor="middle" class="role">HR Business Partner</text>
+<path class="line" d="M535 265 V300"/>
+<rect x="380" y="300" width="310" height="64" rx="10" fill="#3259a5"/>
+<text x="535" y="339" text-anchor="middle" class="dept">Information Technology (IT)</text>
+<path class="line" d="M535 364 V390 H394 V574"/>
+<path class="line" d="M394 422 H410"/>
+<rect x="410" y="398" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="550" y="430" text-anchor="middle" class="role">Developer</text>
+<path class="line" d="M394 498 H410"/>
+<rect x="410" y="474" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="550" y="497" text-anchor="middle" class="role">Quality Assurance (QA)</text>
+<text x="550" y="516" text-anchor="middle" class="role">Engineer</text>
+<path class="line" d="M394 574 H410"/>
+<rect x="410" y="550" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="550" y="582" text-anchor="middle" class="role">DevOps Engineer</text>
+<path class="line" d="M890 265 V300"/>
+<rect x="735" y="300" width="310" height="64" rx="10" fill="#3259a5"/>
+<text x="890" y="339" text-anchor="middle" class="dept">Sales</text>
+<path class="line" d="M890 364 V390 H749 V574"/>
+<path class="line" d="M749 422 H765"/>
+<rect x="765" y="398" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="905" y="430" text-anchor="middle" class="role">Sales Manager</text>
+<path class="line" d="M749 498 H765"/>
+<rect x="765" y="474" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="905" y="497" text-anchor="middle" class="role">Sales Development</text>
+<text x="905" y="516" text-anchor="middle" class="role">Representative</text>
+<path class="line" d="M749 574 H765"/>
+<rect x="765" y="550" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="905" y="582" text-anchor="middle" class="role">Relationship Manager (RM)</text>
+<path class="line" d="M1245 265 V300"/>
+<rect x="1090" y="300" width="310" height="64" rx="10" fill="#3259a5"/>
+<text x="1245" y="339" text-anchor="middle" class="dept">Finance</text>
+<path class="line" d="M1245 364 V390 H1104 V574"/>
+<path class="line" d="M1104 422 H1120"/>
+<rect x="1120" y="398" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="1260" y="430" text-anchor="middle" class="role">Accounting Manager</text>
+<path class="line" d="M1104 498 H1120"/>
+<rect x="1120" y="474" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="1260" y="506" text-anchor="middle" class="role">Financial Analyst</text>
+<path class="line" d="M1104 574 H1120"/>
+<rect x="1120" y="550" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="1260" y="582" text-anchor="middle" class="role">Payroll Specialist</text>
+<path class="line" d="M1600 265 V300"/>
+<rect x="1445" y="300" width="310" height="64" rx="10" fill="#3259a5"/>
+<text x="1600" y="339" text-anchor="middle" class="dept">Legal &amp; Compliance</text>
+<path class="line" d="M1600 364 V390 H1459 V574"/>
+<path class="line" d="M1459 422 H1475"/>
+<rect x="1475" y="398" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="1615" y="430" text-anchor="middle" class="role">Head of Legal</text>
+<path class="line" d="M1459 498 H1475"/>
+<rect x="1475" y="474" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="1615" y="497" text-anchor="middle" class="role">Legal Counsel / Contracts</text>
+<text x="1615" y="516" text-anchor="middle" class="role">Specialist</text>
+<path class="line" d="M1459 574 H1475"/>
+<rect x="1475" y="550" width="280" height="54" rx="8" fill="white" stroke="#d7dfed"/>
+<text x="1615" y="582" text-anchor="middle" class="role">Compliance Analyst</text>
+<text x="55" y="764" class="sub">Role titles standardised from the supplied sketch. RM interpreted as Relationship Manager.</text>
+<text x="55" y="793" class="sub">Department branches show role groupings; reporting lines within each department are not specified.</text>
+</svg>

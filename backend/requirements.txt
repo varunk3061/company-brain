@@ -3,6 +3,6 @@ uvicorn[standard]
 pymongo
 pydantic[email]
 python-dotenv
-passlib[bcrypt]
+passlib[bcrypt]==1.7.4
 python-jose[cryptography]
 python-multipart
