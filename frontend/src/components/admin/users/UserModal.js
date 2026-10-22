@@ -1,9 +1,10 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { ChevronDownIcon } from "../icons";
 import { ACCESS_ROLES, DEPARTMENTS } from "./data";
+import { Eye, EyeOff } from "lucide-react";
+import { capitalizeName } from "@/lib/utils";
 
 // Validate email addresses.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -14,8 +15,7 @@ const inputBase =
 const inputOk =
   "border-slate-200 focus:border-indigo-500 focus:ring-indigo-100";
 
-const inputErr =
-  "border-red-300 focus:border-red-500 focus:ring-red-100";
+const inputErr = "border-red-300 focus:border-red-500 focus:ring-red-100";
 
 // Reusable dropdown for department and access role.
 function SelectField({ id, label, value, onChange, options }) {
@@ -33,7 +33,7 @@ function SelectField({ id, label, value, onChange, options }) {
           id={id}
           value={value}
           onChange={onChange}
-          className={`${inputBase} ${inputOk} appearance-none pr-10`}
+          className={`${inputBase} ${inputOk} appearance-none pr-10 cursor-pointer`}
         >
           {options.map((option) => (
             <option key={option} value={option}>
@@ -70,6 +70,13 @@ export default function UserModal({
   // Used only when creating a new employee.
   const [password, setPassword] = useState("");
 
+  // For confirm password
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  // For show password and show confirm password
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -104,7 +111,7 @@ export default function UserModal({
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const name = form.name.trim();
+    const name = capitalizeName(form.name);
     const email = form.email.trim().toLowerCase();
     const nextErrors = {};
 
@@ -122,7 +129,7 @@ export default function UserModal({
       nextErrors.email = "Enter a valid email address.";
     } else {
       const normalizedTakenEmails = takenEmails.map((item) =>
-        String(item).trim().toLowerCase()
+        String(item).trim().toLowerCase(),
       );
 
       // When editing, allow the employee to keep their own email.
@@ -134,8 +141,7 @@ export default function UserModal({
         normalizedTakenEmails.includes(email) &&
         (!editing || email !== currentEmail)
       ) {
-        nextErrors.email =
-          "An employee with this email already exists.";
+        nextErrors.email = "An employee with this email already exists.";
       }
     }
 
@@ -143,12 +149,15 @@ export default function UserModal({
     if (!editing) {
       if (!password) {
         nextErrors.password = "Enter a temporary password.";
-      } else if (password.length < 8) {
-        nextErrors.password =
-          "Password must contain at least 8 characters.";
+      } else if (password.length < 6) {
+        nextErrors.password = "Password must contain at least 6 characters.";
       } else if (new TextEncoder().encode(password).length > 72) {
-        nextErrors.password =
-          "Password must not exceed 72 UTF-8 bytes.";
+        nextErrors.password = "Password must not exceed 72 UTF-8 bytes.";
+      }
+      if (!confirmPassword) {
+        nextErrors.confirmPassword = "Confirm the Password";
+      } else if (password !== confirmPassword) {
+        nextErrors.confirmPassword = "Passwords do not match.";
       }
     }
 
@@ -186,6 +195,8 @@ export default function UserModal({
     }
   };
 
+  //----------------------------------------------------------------------------------------------------------
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
@@ -200,12 +211,9 @@ export default function UserModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="user-modal-title"
-        className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl sm:p-7"
+        className="relative max-h-[95vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl sm:p-7"
       >
-        <h2
-          id="user-modal-title"
-          className="text-lg font-bold text-slate-900"
-        >
+        <h2 id="user-modal-title" className="text-lg font-bold text-slate-900">
           {editing ? "Edit Employee" : "Add New Employee"}
         </h2>
 
@@ -215,11 +223,7 @@ export default function UserModal({
             : "Create an employee account and choose what they can access."}
         </p>
 
-        <form
-          onSubmit={handleSubmit}
-          noValidate
-          className="mt-6 space-y-4"
-        >
+        <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
           {/* Employee name */}
           <div>
             <label
@@ -246,9 +250,7 @@ export default function UserModal({
             />
 
             {errors.name && (
-              <p className="mt-1.5 text-xs text-red-600">
-                {errors.name}
-              </p>
+              <p className="mt-1.5 text-xs text-red-600">{errors.name}</p>
             )}
           </div>
 
@@ -258,7 +260,12 @@ export default function UserModal({
               htmlFor="emp-email"
               className="mb-1.5 block text-sm font-medium text-slate-700"
             >
-              Email {editing && <span className="text-xs text-slate-400 font-normal">(cannot be changed)</span>}
+              Email{" "}
+              {editing && (
+                <span className="text-xs text-slate-400 font-normal">
+                  (cannot be changed)
+                </span>
+              )}
             </label>
 
             <input
@@ -277,55 +284,128 @@ export default function UserModal({
             />
 
             {errors.email && (
-              <p className="mt-1.5 text-xs text-red-600">
-                {errors.email}
-              </p>
+              <p className="mt-1.5 text-xs text-red-600">{errors.email}</p>
             )}
           </div>
 
-          {/* Temporary password: only for new employees */}
+          {/* password: only for new employees */}
           {!editing && (
-            <div>
-              <label
-                htmlFor="emp-password"
-                className="mb-1.5 block text-sm font-medium text-slate-700"
-              >
-                Password
-              </label>
+            <>
+              <div>
+                <label
+                  htmlFor="emp-password"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Password
+                </label>
 
-              <input
-                id="emp-password"
-                type="password"
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value);
+                <div className="relative">
+                  <input
+                    id="emp-password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
 
-                  setErrors((currentErrors) => ({
-                    ...currentErrors,
-                    password: "",
-                    submit: "",
-                  }));
-                }}
-                placeholder="At least 8 characters"
-                autoComplete="new-password"
-                minLength={8}
-                aria-invalid={Boolean(errors.password)}
-                className={`${inputBase} ${
-                  errors.password ? inputErr : inputOk
-                }`}
-                required
-              />
+                      setErrors((currentErrors) => ({
+                        ...currentErrors,
+                        password: "",
+                        submit: "",
+                      }));
+                    }}
+                    placeholder="At least 6 characters"
+                    autoComplete="new-password"
+                    minLength={6}
+                    aria-invalid={Boolean(errors.password)}
+                    className={`${inputBase} ${
+                      errors.password ? inputErr : inputOk
+                    }`}
+                    required
+                  />
 
-              {errors.password && (
-                <p className="mt-1.5 text-xs text-red-600">
-                  {errors.password}
-                </p>
-              )}
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={
+                      showPassword ? "Hide Password" : "Show Password"
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 cursor-pointer"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
 
-              <p className="mt-1.5 text-xs text-slate-500">
-                The backend must hash this password before storing it.
-              </p>
-            </div>
+                  {errors.password && (
+                    <p className="mt-1.5 text-xs text-red-600">
+                      {errors.password}
+                    </p>
+                  )}
+                </div>
+
+                {/* <p className="mt-1.5 text-xs text-slate-500">
+                  The backend must hash this password before storing it.
+                </p> */}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="emp-confirm-password"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Confirm password
+                </label>
+
+                <div className="relative">
+                  <input
+                    id="emp-confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value);
+
+                      setErrors((currentErrors) => ({
+                        ...currentErrors,
+                        confirmPassword: "",
+                        submit: "",
+                      }));
+                    }}
+                    placeholder="Re-enter password"
+                    autoComplete="new-password"
+                    aria-invalid={Boolean(errors.confirmPassword)}
+                    className={`${inputBase} ${
+                      errors.confirmPassword ? inputErr : inputOk
+                    }`}
+                    required
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    aria-label={
+                      showConfirmPassword
+                        ? "Hide Confirm Password"
+                        : "Show Confirm Password"
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 cursor-pointer"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
+
+                  {errors.confirmPassword && (
+                    <p className="mt-1.5 text-xs text-red-600">
+                      {errors.confirmPassword}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </>
           )}
 
           {/* Department and access role */}
@@ -363,7 +443,7 @@ export default function UserModal({
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="rounded-xl px-5 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl px-5 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               Cancel
             </button>
@@ -371,13 +451,9 @@ export default function UserModal({
             <button
               type="submit"
               disabled={saving}
-              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
-              {saving
-                ? "Saving..."
-                : editing
-                  ? "Save Changes"
-                  : "Add Employee"}
+              {saving ? "Saving..." : editing ? "Save Changes" : "Add Employee"}
             </button>
           </div>
         </form>

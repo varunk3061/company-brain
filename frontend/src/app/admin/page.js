@@ -11,7 +11,7 @@ export default function AdminOverviewPage() {
             Real-time metrics, system health, and recent knowledge ingestion activity.
           </p>
         </div>
-        <SyncButton />
+        {/* <SyncButton /> */}
       </div>
 
       <DashboardOverview />
