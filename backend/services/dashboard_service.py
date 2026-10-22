@@ -4,7 +4,7 @@ from database.connection import employees_collection, documents_collection
 
 #-------------------------------------------------------------------------------------
 
-ACTIVITY_LIMIT = 10
+ACTIVITY_LIMIT = 5
 
 #-------------------------------------------------------------------------------------
 

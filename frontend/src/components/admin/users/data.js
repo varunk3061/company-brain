@@ -4,7 +4,7 @@ export const DEPARTMENTS = ["IT", "HR", "Finance", "Support", "Operations"];
 
 // Access tiers an employee can be given for RAG retrieval.
 export const ACCESS_ROLES = [
-  "developer", "tester", "devops", "hr", "finance", "employee"
+  "Developer", "Tester", "DevOps", "HR", "Finance"
 ];
 
 // status: Active | Revoked

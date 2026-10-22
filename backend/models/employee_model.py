@@ -8,11 +8,11 @@ from pydantic import (
 #--------------------------------------------------------------------------------------------
 
 # Allowed employee roles
-EmployeeRole = Literal["developer", "tester", "devops", "hr", "finance", "employee"]
+EmployeeRole = Literal["Developer", "Tester", "DevOps", "HR", "Finance"]
 
 # Allowed Departments
 EmployeeDepartment = Literal[
-    "IT", "HR", "Finance", "Support", "Operations",
+    "IT", "HR", "Finance", "Support"
 ]
 
 # Allowed Account Status

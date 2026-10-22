@@ -1,15 +1,10 @@
-
 "use client";
 
 import { getMyProfile } from "@/services/employeeService";
 import { useEffect, useRef, useState } from "react";
 
 import Sidebar from "./Sidebar";
-import {
-  AssistantMessage,
-  TypingMessage,
-  UserMessage,
-} from "./Message";
+import { AssistantMessage, TypingMessage, UserMessage } from "./Message";
 
 import {
   BrainIcon,
@@ -22,12 +17,7 @@ import {
   SendIcon,
 } from "./icons";
 
-import {
-  INITIAL_CONVERSATIONS,
-  SCOPES,
-  SUGGESTIONS,
-  USER,
-} from "./data";
+import { INITIAL_CONVERSATIONS, SCOPES, SUGGESTIONS, USER } from "./data";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -47,12 +37,10 @@ async function askBrain(query, scope) {
 }
 
 export default function ChatApp() {
-  const [conversations, setConversations] = useState(
-    INITIAL_CONVERSATIONS
-  );
+  const [conversations, setConversations] = useState(INITIAL_CONVERSATIONS);
 
   const [activeId, setActiveId] = useState(
-    INITIAL_CONVERSATIONS[0]?.id ?? null
+    INITIAL_CONVERSATIONS[0]?.id ?? null,
   );
 
   const [scope, setScope] = useState(SCOPES[0]);
@@ -60,6 +48,9 @@ export default function ChatApp() {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Control the sign-out confirmation modal
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
 
   // Logged-in employee profile from FastAPI.
   const [employee, setEmployee] = useState(null);
@@ -82,9 +73,7 @@ export default function ChatApp() {
         }
       } catch (error) {
         if (!cancelled) {
-          setProfileError(
-            error.message || "Unable to load employee profile."
-          );
+          setProfileError(error.message || "Unable to load employee profile.");
         }
       }
     }
@@ -102,19 +91,12 @@ export default function ChatApp() {
       behavior: "smooth",
       block: "end",
     });
-  }, [
-    conversations,
-    loading,
-    activeId,
-  ]);
+  }, [conversations, loading, activeId]);
 
   // Close the profile menu when clicking outside it.
   useEffect(() => {
     const onClick = (event) => {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(event.target)
-      ) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
         setMenuOpen(false);
       }
     };
@@ -128,21 +110,16 @@ export default function ChatApp() {
 
   // Resolve the active conversation.
   const active =
-    conversations.find((conversation) => conversation.id === activeId) ??
-    null;
+    conversations.find((conversation) => conversation.id === activeId) ?? null;
 
   const messages = active?.messages ?? [];
 
-  const hasSources = messages.some(
-    (message) => message.sources?.length > 0
-  );
+  const hasSources = messages.some((message) => message.sources?.length > 0);
 
   // Use the API profile, falling back to the existing mock data.
-  const employeeName =
-    employee?.name || USER.name || "Employee";
+  const employeeName = employee?.name || USER.name || "Employee";
 
-  const employeeRole =
-    employee?.role || USER.role || "Employee";
+  const employeeRole = employee?.role || USER.role || "Employee";
 
   const employeeInitials = employeeName
     .split(" ")
@@ -185,10 +162,7 @@ export default function ChatApp() {
         Math.max(0, ...conversations.map((conversation) => conversation.num)) +
         1;
 
-      const title =
-        query.length > 40
-          ? `${query.slice(0, 40)}...`
-          : query;
+      const title = query.length > 40 ? `${query.slice(0, 40)}...` : query;
 
       setConversations((previous) => [
         {
@@ -207,13 +181,10 @@ export default function ChatApp() {
           conversation.id === convId
             ? {
                 ...conversation,
-                messages: [
-                  ...conversation.messages,
-                  userMsg,
-                ],
+                messages: [...conversation.messages, userMsg],
               }
-            : conversation
-        )
+            : conversation,
+        ),
       );
     }
 
@@ -228,13 +199,10 @@ export default function ChatApp() {
           conversation.id === convId
             ? {
                 ...conversation,
-                messages: [
-                  ...conversation.messages,
-                  reply,
-                ],
+                messages: [...conversation.messages, reply],
               }
-            : conversation
-        )
+            : conversation,
+        ),
       );
     } catch (error) {
       const errorReply = {
@@ -251,13 +219,10 @@ export default function ChatApp() {
           conversation.id === convId
             ? {
                 ...conversation,
-                messages: [
-                  ...conversation.messages,
-                  errorReply,
-                ],
+                messages: [...conversation.messages, errorReply],
               }
-            : conversation
-        )
+            : conversation,
+        ),
       );
     } finally {
       setLoading(false);
@@ -278,22 +243,19 @@ export default function ChatApp() {
 
     active.messages.forEach((message) => {
       if (message.role === "user") {
-        lines.push(
-          `**${employeeName}:** ${message.text}`,
-          ""
-        );
+        lines.push(`**${employeeName}:** ${message.text}`, "");
       } else {
         lines.push(
           `**The Company Brain:** ${message.paragraphs
             .join("\n\n")
             .replace(/\[\[|\]\]/g, "")}`,
-          ""
+          "",
         );
 
         message.sources?.forEach((source) =>
           lines.push(
-            `- ${source.file} (relevance ${source.relevance}%, page ${source.page})`
-          )
+            `- ${source.file} (relevance ${source.relevance}%, page ${source.page})`,
+          ),
         );
 
         lines.push("");
@@ -315,6 +277,27 @@ export default function ChatApp() {
     anchor.click();
     URL.revokeObjectURL(url);
   };
+
+  // Open the signout confirmation modal
+  const handleSignOutClick = () => {
+    setMenuOpen(false);
+    setShowSignOutModal(true);
+  };
+
+  // Cancel signout and close modal
+  const handleCancelSignOut = () => {
+    setShowSignOutModal(false);
+  };
+
+  // Sign out after confirmation
+  const handleConfirmSignOut = () => {
+    localStorage.removeItem("access_token");
+    sessionStorage.removeItem("access_token");
+
+    window.location.href = "/login";
+  };
+
+  //-------------------------------------------------------------------------------------------------------------------------------------------
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-white text-slate-900">
@@ -350,7 +333,7 @@ export default function ChatApp() {
             onClick={() => setMenuOpen((open) => !open)}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
               {employeeInitials}
@@ -375,19 +358,18 @@ export default function ChatApp() {
               className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
             >
               {profileError && (
-                <p className="px-3 py-2 text-xs text-red-600">
-                  {profileError}
-                </p>
+                <p className="px-3 py-2 text-xs text-red-600">{profileError}</p>
               )}
 
-              <a
+              <button
                 href="/login"
                 role="menuitem"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                onClick={handleSignOutClick}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-red-50 hover:text-red-600 cursor-pointer"
               >
                 <LogOutIcon className="h-4 w-4 text-slate-500" />
                 Sign out
-              </a>
+              </button>
             </div>
           )}
         </div>
@@ -465,7 +447,8 @@ export default function ChatApp() {
                 </h2>
 
                 <p className="mt-1.5 text-sm text-slate-500">
-                  Answers come from documents you have permission to access, with sources cited.
+                  Answers come from documents you have permission to access,
+                  with sources cited.
                 </p>
 
                 <div className="mt-6 flex w-full flex-col gap-2">
@@ -485,16 +468,10 @@ export default function ChatApp() {
               <div className="mx-auto max-w-5xl space-y-6">
                 {messages.map((message) =>
                   message.role === "user" ? (
-                    <UserMessage
-                      key={message.id}
-                      message={message}
-                    />
+                    <UserMessage key={message.id} message={message} />
                   ) : (
-                    <AssistantMessage
-                      key={message.id}
-                      message={message}
-                    />
-                  )
+                    <AssistantMessage key={message.id} message={message} />
+                  ),
                 )}
 
                 {loading && <TypingMessage />}
@@ -538,11 +515,67 @@ export default function ChatApp() {
             </form>
 
             <p className="mt-2.5 text-center text-[11px] text-slate-400">
-              The Company Brain uses secure Retrieval-Augmented Generation with strict RBAC permissioning.
+              The Company Brain uses secure Retrieval-Augmented Generation with
+              strict RBAC permissioning.
             </p>
           </div>
         </main>
       </div>
+
+      {/* Confirmation Modal */}
+      {showSignOutModal && (
+        <div
+          className="fixed inset-0 z-100 flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-sm"
+          onClick={handleCancelSignOut}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="Signout-modal-title"
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {/* Modal Icon */}
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100">
+              <LogOutIcon className="h-7 w-7 text-red-600" />
+            </div>
+
+            {/* Modal Heading */}
+            <h2
+              id="signout-modal-title"
+              className="mt-4 text-center text-xl font-semibold text-slate-900"
+            >
+              Sign out?
+            </h2>
+
+            {/* Modal Description */}
+            <p className="mt-2 text-center text-sm leading-6 text-slate-500">
+              Are you sure you want to sign out of The Company Brain? You will
+              need to log in again to access your account.
+            </p>
+
+            {/* Modal Actions */}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleCancelSignOut}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmSignOut}
+                className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 cursor-pointer"
+              >
+                <LogOutIcon className="h-4 w-4" />
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
