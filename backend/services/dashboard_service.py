@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from database.connection import employees_collection, documents_collection
+from database.connection import users_collection, documents_collection
 
 #-------------------------------------------------------------------------------------
 
@@ -29,14 +29,14 @@ def get_dashboard_data() -> dict:
 
     # --- Stats -----------------------------------------------------------------------
     stats = {
-        "total_users": employees_collection.count_documents({}),
-        "users_added_this_month": employees_collection.count_documents(
+        "total_users": users_collection.count_documents({}),
+        "users_added_this_month": users_collection.count_documents(
             {"created_at": {"$gte": month_start}}
         ),
-        "blocked_users": employees_collection.count_documents({"status": "blocked"}),
+        "blocked_users": users_collection.count_documents({"status": "blocked"}),
         "indexed_documents": documents_collection.count_documents({}),
-        "documents_with_roles": documents_collection.count_documents(
-            {"allowed_roles.0": {"$exists": True}}
+        "documents_classified": documents_collection.count_documents(
+            {"needs_classification": {"$ne": True}}
         ),
         # Not recorded anywhere yet.
         "daily_rag_queries": 0,
@@ -47,18 +47,18 @@ def get_dashboard_data() -> dict:
     # --- Recent activity (built from existing records) --------------------------------
     activity = []
 
-    recent_employees = employees_collection.find(
+    recent_employees = users_collection.find(
         {},
-        {"_id": 0, "employee_uuid": 1, "name": 1, "department": 1, "created_at": 1},
+        {"_id": 0, "user_uuid": 1, "name": 1, "department_code": 1, "created_at": 1},
     ).sort("created_at", -1).limit(ACTIVITY_LIMIT)
 
     for employee in recent_employees:
         activity.append({
-            "id": f"emp-{employee.get('employee_uuid')}",
+            "id": f"emp-{employee.get('user_uuid')}",
             "type": "user-add",
-            "event": f"Added employee account: {employee.get('name') or '-'}",
+            "event": f"Added user account: {employee.get('name') or '-'}",
             "actor": employee.get("name"),
-            "dept": employee.get("department"),
+            "dept": employee.get("department_code"),
             "status": "Created",
             "timestamp": _as_utc(employee.get("created_at")),
         })

@@ -1,26 +1,240 @@
 @import "tailwindcss";
 
+/*
+ * Single source of truth for colours, fonts, radii, shadows and type sizes.
+ * Components use only the semantic utilities generated from the tokens below
+ * (bg-surface, text-ink, border-line, bg-brand, rounded-card, shadow-card, text-micro, ...).
+ * To re-theme or re-brand the app, edit this file only.
+ *
+ * Theme selection: <html data-theme="light|dark|system">. The default comes from
+ * NEXT_PUBLIC_DEFAULT_THEME (src/config/theme.js); users override it in the profile menu.
+ */
+
+/* ---------- Light (default) ---------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  --canvas: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #f9fafd;
+  --surface-3: #eef0f6;
+  --line: #e4e7ef;
+  --line-strong: #cbd0dc;
+
+  --ink: #111827;
+  --ink-2: #4b5563;
+  --ink-3: #5b6472;
+
+  --brand: #4f46e5;
+  --brand-hover: #4338ca;
+  --brand-tint: #eef0ff;
+  --brand-text: #4f46e5;
+  --on-brand: #ffffff;
+
+  --success: #047857;
+  --success-soft: #e8f7f0;
+  --warning: #b45309;
+  --warning-soft: #fef3e2;
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
+  --on-danger: #ffffff;
+  --danger-soft: #fdecec;
+  --info: #0369a1;
+  --info-soft: #e6f3fa;
+
+  --cat-2: #7c3aed;
+  --cat-2-soft: #f1ebfe;
+  --cat-3: #be123c;
+  --cat-3-soft: #fdebef;
+  --cat-4: #0f766e;
+  --cat-4-soft: #e3f4f2;
+
+  --overlay: rgb(17 24 39 / 0.45);
+  --shadow-color: rgb(16 24 40 / 0.06);
+  --shadow-pop-color: rgb(16 24 40 / 0.18);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ---------- Dark ---------- */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #0b0f1a;
+  --surface: #121826;
+  --surface-2: #182033;
+  --surface-3: #1f2940;
+  --line: #263043;
+  --line-strong: #3a465c;
+
+  --ink: #f3f4f6;
+  --ink-2: #b6bdcb;
+  --ink-3: #8b94a7;
+
+  --brand: #5a5ee8;
+  --brand-hover: #4a4ed8;
+  --brand-tint: #1e2247;
+  --brand-text: #a5b4fc;
+  --on-brand: #ffffff;
+
+  --success: #34d399;
+  --success-soft: #10281f;
+  --warning: #fbbf24;
+  --warning-soft: #2e2310;
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --on-danger: #1a0a0a;
+  --danger-soft: #301717;
+  --info: #38bdf8;
+  --info-soft: #0f2533;
+
+  --cat-2: #a78bfa;
+  --cat-2-soft: #251c3f;
+  --cat-3: #fb7185;
+  --cat-3-soft: #33161d;
+  --cat-4: #2dd4bf;
+  --cat-4-soft: #0f2a28;
+
+  --overlay: rgb(0 0 0 / 0.6);
+  --shadow-color: rgb(0 0 0 / 0.4);
+  --shadow-pop-color: rgb(0 0 0 / 0.6);
 }
 
+/* ---------- System: dark values when the OS prefers dark (keep in sync with [data-theme="dark"]) ---------- */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  [data-theme="system"] {
+    color-scheme: dark;
+
+    --canvas: #0b0f1a;
+    --surface: #121826;
+    --surface-2: #182033;
+    --surface-3: #1f2940;
+    --line: #263043;
+    --line-strong: #3a465c;
+
+    --ink: #f3f4f6;
+    --ink-2: #b6bdcb;
+    --ink-3: #8b94a7;
+
+    --brand: #5a5ee8;
+    --brand-hover: #4a4ed8;
+    --brand-tint: #1e2247;
+    --brand-text: #a5b4fc;
+    --on-brand: #ffffff;
+
+    --success: #34d399;
+    --success-soft: #10281f;
+    --warning: #fbbf24;
+    --warning-soft: #2e2310;
+    --danger: #f87171;
+    --danger-hover: #fca5a5;
+    --on-danger: #1a0a0a;
+    --danger-soft: #301717;
+    --info: #38bdf8;
+    --info-soft: #0f2533;
+
+    --cat-2: #a78bfa;
+    --cat-2-soft: #251c3f;
+    --cat-3: #fb7185;
+    --cat-3-soft: #33161d;
+    --cat-4: #2dd4bf;
+    --cat-4-soft: #0f2a28;
+
+    --overlay: rgb(0 0 0 / 0.6);
+    --shadow-color: rgb(0 0 0 / 0.4);
+    --shadow-pop-color: rgb(0 0 0 / 0.6);
   }
 }
 
+/* ---------- Tokens -> Tailwind utilities ---------- */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-tint: var(--brand-tint);
+  --color-brand-text: var(--brand-text);
+  --color-on-brand: var(--on-brand);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-on-danger: var(--on-danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --color-cat-2: var(--cat-2);
+  --color-cat-2-soft: var(--cat-2-soft);
+  --color-cat-3: var(--cat-3);
+  --color-cat-3-soft: var(--cat-3-soft);
+  --color-cat-4: var(--cat-4);
+  --color-cat-4-soft: var(--cat-4-soft);
+
+  --color-overlay: var(--overlay);
+
+  --shadow-card: 0 1px 2px var(--shadow-color);
+  --shadow-pop: 0 12px 32px -8px var(--shadow-pop-color);
+}
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --radius-card: 0.75rem;
+  --radius-control: 0.625rem;
+
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1rem;
+  --text-chat: 0.9375rem;
+  --text-chat--line-height: 1.6;
+}
+
+/* ---------- Base ---------- */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/* One rule for every interactive control: pointer when usable, not-allowed when disabled. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+summary,
+select:not(:disabled),
+label[for],
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="submit"]:not(:disabled) {
+  cursor: pointer;
+}
+
+:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* One focus ring for everything focusable. */
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand) 35%, transparent);
+  outline-offset: 2px;
+}
+
+/* Staggered "typing" dots in the chat. */
+@utility anim-delay-1 {
+  animation-delay: -0.3s;
+}
+
+@utility anim-delay-2 {
+  animation-delay: -0.15s;
 }

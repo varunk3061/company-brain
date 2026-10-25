@@ -18,3 +18,5 @@ out/
 
 # Logs
 *.log
+# Assignment and company documents (not committed)
+Documents/

@@ -3,25 +3,9 @@
 import { useState } from "react";
 import { loginUser } from "@/services/authService";
 
-const ROLES = [
-  {
-    id: "employee",
-    label: "Employee Access",
-    emailLabel: "Email",
-    placeholder: "email",
-  },
-  {
-    id: "admin",
-    label: "Admin Portal",
-    emailLabel: "Email",
-    placeholder: "email",
-  },
-];
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginCard() {
-  const [role, setRole] = useState("employee");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,15 +13,11 @@ export default function LoginCard() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const active = ROLES.find((r) => r.id === role);
-
   const validate = () => {
     const next = {};
     if (!email.trim()) next.email = "Enter your email address.";
     else if (!EMAIL_RE.test(email)) next.email = "Enter a valid email address.";
     if (!password) next.password = "Enter your password.";
-    else if (password.length < 6)
-      next.password = "Password must be at least 6 characters.";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -51,7 +31,7 @@ export default function LoginCard() {
     setErrors({});
 
     try {
-      const data = await loginUser(role, {
+      const data = await loginUser({
         email: email.trim(),
         password,
       });
@@ -75,10 +55,13 @@ export default function LoginCard() {
       sessionStorage.removeItem("access_token");
 
       storage.setItem("access_token", token);
-      storage.setItem("user_role", role);
 
-      // Navigate to the correct section.
-      window.location.href = role === "admin" ? "/admin" : "/dashboard";
+      // Admins land in the control center; everyone else in the chat.
+      const permissions = data.user?.permissions ?? [];
+      const isAdmin = ["users.manage", "documents.manage", "org.manage"].some(
+        (permission) => permissions.includes(permission),
+      );
+      window.location.href = isAdmin ? "/admin" : "/dashboard";
     } catch (error) {
       setErrors({
         form: error.message || "Unable to sign in. Please try again.",
@@ -88,22 +71,17 @@ export default function LoginCard() {
     }
   };
 
-  const switchRole = (id) => {
-    setRole(id);
-    setErrors({});
-  };
-
   const inputBase =
-    "block w-full rounded-xl border bg-slate-50 py-3 pl-11 pr-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:bg-white focus:ring-4";
+    "block w-full rounded-control border bg-surface-2 py-3 pl-11 pr-4 text-sm text-ink placeholder:text-ink-3 outline-none transition focus:bg-surface focus:ring-4";
   const inputOk =
-    "border-slate-200 focus:border-indigo-500 focus:ring-indigo-100";
-  const inputErr = "border-red-300 focus:border-red-500 focus:ring-red-100";
+    "border-line focus:border-brand focus:ring-brand/25";
+  const inputErr = "border-danger/30 focus:border-danger focus:ring-danger/25";
 
   return (
-    <div className="w-full max-w-md rounded-3xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-200/60 sm:p-10">
+    <div className="w-full max-w-md rounded-card border border-line/80 bg-surface p-8 shadow-pop sm:p-10">
       {/* Brand */}
       <div className="flex flex-col items-center text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200">
+        <div className="flex h-16 w-16 items-center justify-center rounded-card bg-brand text-on-brand shadow-card">
           <svg
             viewBox="0 0 24 24"
             className="h-8 w-8"
@@ -119,43 +97,19 @@ export default function LoginCard() {
             <path d="M12 5v13" />
           </svg>
         </div>
-        <h1 className="mt-6 text-2xl font-bold tracking-tight text-slate-900">
+        <h1 className="mt-6 text-2xl font-bold tracking-tight text-ink">
           The Company Brain
         </h1>
-        {/* <p className="mt-1.5 text-sm text-slate-500">
+        {/* <p className="mt-1.5 text-sm text-ink-3">
           Enterprise Knowledge Retrieval &amp; RAG System
         </p> */}
       </div>
 
-      {/* Role toggle */}
-      <div
-        role="tablist"
-        aria-label="Sign in as"
-        className="mt-8 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1"
-      >
-        {ROLES.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            role="tab"
-            aria-selected={role === r.id}
-            onClick={() => switchRole(r.id)}
-            className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer ${
-              role === r.id
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-5">
+      <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
         {errors.form && (
           <div
             role="alert"
-            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            className="rounded-control border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger"
           >
             {errors.form}
           </div>
@@ -165,14 +119,14 @@ export default function LoginCard() {
         <div>
           <label
             htmlFor="email"
-            className="mb-1.5 block text-sm font-medium text-slate-700"
+            className="mb-1.5 block text-sm font-medium text-ink-2"
           >
-            {active.emailLabel}
+            Email
           </label>
           <div className="relative">
             <svg
               viewBox="0 0 24 24"
-              className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400"
+              className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-ink-3"
               fill="none"
               stroke="currentColor"
               strokeWidth="1.8"
@@ -189,13 +143,13 @@ export default function LoginCard() {
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={active.placeholder}
+              placeholder="you@company.com"
               aria-invalid={!!errors.email}
               className={`${inputBase} ${errors.email ? inputErr : inputOk}`}
             />
           </div>
           {errors.email && (
-            <p className="mt-1.5 text-xs text-red-600">{errors.email}</p>
+            <p className="mt-1.5 text-xs text-danger">{errors.email}</p>
           )}
         </div>
 
@@ -203,14 +157,14 @@ export default function LoginCard() {
         <div>
           <label
             htmlFor="password"
-            className="mb-1.5 block text-sm font-medium text-slate-700"
+            className="mb-1.5 block text-sm font-medium text-ink-2"
           >
             Password
           </label>
           <div className="relative">
             <svg
               viewBox="0 0 24 24"
-              className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400"
+              className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-ink-3"
               fill="none"
               stroke="currentColor"
               strokeWidth="1.8"
@@ -235,12 +189,12 @@ export default function LoginCard() {
               type="button"
               onClick={() => setShowPassword((s) => !s)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-control p-2 text-ink-3 transition hover:text-ink-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               {showPassword ? (
                 <svg
                   viewBox="0 0 24 24"
-                  className="h-4.5 w-4.5 cursor-pointer" 
+                  className="h-4.5 w-4.5" 
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"
@@ -255,7 +209,7 @@ export default function LoginCard() {
               ) : (
                 <svg
                   viewBox="0 0 24 24"
-                  className="h-4.5 w-4.5 cursor-pointer"
+                  className="h-4.5 w-4.5"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"
@@ -270,25 +224,29 @@ export default function LoginCard() {
             </button>
           </div>
           {errors.password && (
-            <p className="mt-1.5 text-xs text-red-600">{errors.password}</p>
+            <p className="mt-1.5 text-xs text-danger">{errors.password}</p>
           )}
         </div>
+
+        <p className="text-center text-xs text-ink-3">
+          Forgot your password? Contact your system administrator.
+        </p>
 
         {/* Remember + forgot */}
         {/* for future use */}
         {/* <div className="flex items-center justify-between"> */}
-          {/* <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+          {/* <label className="flex items-center gap-2 text-sm text-ink-2">
             <input
               type="checkbox"
               checked={remember}
               onChange={(e) => setRemember(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-line-strong text-brand-text focus:ring-brand"
             />
             Remember this device
           </label> */}
           {/* <a
             href="/forgot-password"
-            className="text-sm font-medium text-indigo-600 hover:text-indigo-700 focus:outline-none focus-visible:underline"
+            className="text-sm font-medium text-brand-text hover:text-brand-text focus:outline-none focus-visible:underline"
           >
             Forgot password?
           </a> */}
@@ -298,7 +256,7 @@ export default function LoginCard() {
         <button
           type="submit"
           disabled={loading}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer"
+          className="flex w-full items-center justify-center gap-2 rounded-control bg-brand px-4 py-3.5 text-sm font-semibold text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/25 disabled:opacity-70"
         >
           {loading ? (
             <>

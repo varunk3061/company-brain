@@ -8,124 +8,134 @@ import {
   FolderIcon,
   RefreshIcon,
 } from "../icons";
-import { INITIAL_DOCUMENTS, TOTAL_DOCUMENTS, USER_ROLES } from "./data";
 import {
   scanFolder,
   getDocuments,
-  updateDocumentPermissions,
+  updateDocumentAccess,
   deleteDocument,
 } from "@/services/documentService";
+import { getDepartments, getRoles } from "@/services/orgService";
+import { getUsers } from "@/services/userService";
+import Badge, { ClassificationBadge } from "@/components/ui/Badge";
+import { displayName } from "@/lib/format";
 
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const CATEGORY_TONES = {
-  HR: "bg-violet-50 text-violet-600",
-  Engineering: "bg-sky-50 text-sky-600",
-  Security: "bg-emerald-50 text-emerald-600",
-  General: "bg-slate-100 text-slate-600",
-};
+const CLASSIFICATIONS = [
+  { value: "public", label: "Public", hint: "Everyone" },
+  { value: "internal", label: "Internal", hint: "Any signed-in employee" },
+  {
+    value: "confidential",
+    label: "Confidential",
+    hint: "Owning department (with clearance) + explicit grants",
+  },
+  { value: "restricted", label: "Restricted", hint: "Explicit grants only" },
+];
 
 const COLUMNS = [
   { label: "Document Title", className: "" },
-  { label: "Category", className: "" },
+  { label: "Owner Department", className: "" },
+  { label: "Classification", className: "" },
+  { label: "Explicit Access", className: "" },
   { label: "Last Update", className: "" },
-  { label: "Allowed Users", className: "" },
   { label: "Actions", className: "text-right" },
 ];
 
-function RoleTag({ children }) {
-  return (
-    <span className="inline-block rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700">
-      {children}
-    </span>
-  );
+const selectCls =
+  "block w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/25";
+
+function Tag({ children }) {
+  return <Badge tone="brand">{children}</Badge>;
 }
 
-// Multi-select with removable chips, similar to the "Select Multiple Agents" reference.
-// The option list opens inline (not as a popover) so the table's scroll area never clips it.
-function RoleSelect({ value, onChange }) {
+// Multi-select with removable chips. Options open inline so the modal's scroll area never clips them.
+// options: [{ value, label }]; value: array of option values.
+function MultiSelect({ label, options, value, onChange }) {
   const [open, setOpen] = useState(false);
 
-  const toggle = (role) =>
-    onChange(
-      value.includes(role) ? value.filter((r) => r !== role) : [...value, role],
-    );
+  const labelOf = (v) => options.find((o) => o.value === v)?.label ?? v;
+
+  const toggle = (v) =>
+    onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
 
   return (
-    <div className="w-72 rounded-lg border border-slate-300 bg-white p-2">
-      {value.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {value.map((role) => (
-            <span
-              key={role}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white py-1 pl-3 pr-2 text-xs text-slate-800"
-            >
-              {role}
-              <button
-                type="button"
-                onClick={() => toggle(role)}
-                aria-label={`Remove ${role}`}
-                className="rounded-full p-0.5 text-slate-500 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+    <div>
+      <span className="mb-1.5 block text-sm font-medium text-ink-2">
+        {label}
+      </span>
+      <div className="rounded-control border border-line-strong bg-surface p-2">
+        {value.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {value.map((v) => (
+              <span
+                key={v}
+                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-3 pr-2 text-xs text-ink"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-3 w-3"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  aria-hidden="true"
+                {labelOf(v)}
+                <button
+                  type="button"
+                  onClick={() => toggle(v)}
+                  aria-label={`Remove ${labelOf(v)}`}
+                  className="rounded-full p-0.5 text-ink-3 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
-                  <path d="M6 6l12 12M18 6 6 18" />
-                </svg>
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
+                  &times;
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between border-b border-slate-300 pb-1.5 text-left text-xs text-slate-400 transition hover:text-slate-600 focus:outline-none focus-visible:border-indigo-500"
-      >
-        Select multiple user roles
-        <ChevronDownIcon
-          className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`}
-        />
-      </button>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between text-left text-xs text-ink-3 transition hover:text-ink-2 focus:outline-none focus-visible:text-brand-text"
+        >
+          Select {label.toLowerCase()}
+          <ChevronDownIcon
+            className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`}
+          />
+        </button>
 
-      {open && (
-        <ul className="mt-2 max-h-40 overflow-y-auto">
-          {USER_ROLES.map((role) => (
-            <li key={role}>
-              <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
-                <input
-                  type="checkbox"
-                  checked={value.includes(role)}
-                  onChange={() => toggle(role)}
-                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                {role}
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
+        {open && (
+          <ul className="mt-2 max-h-40 overflow-y-auto">
+            {options.length === 0 && (
+              <li className="px-2 py-1.5 text-sm text-ink-3">
+                Nothing to select.
+              </li>
+            )}
+            {options.map((o) => (
+              <li key={o.value}>
+                <label className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-ink-2 hover:bg-surface-2">
+                  <input
+                    type="checkbox"
+                    checked={value.includes(o.value)}
+                    onChange={() => toggle(o.value)}
+                    className="h-4 w-4 rounded border-line-strong text-brand-text focus:ring-brand"
+                  />
+                  {o.label}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
 
 const linkBtn =
-  "rounded text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500";
+  "rounded text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
 export default function DocumentsManager() {
   const [docs, setDocs] = useState([]);
-  // drafts[id] exists only while that row is being edited
-  const [drafts, setDrafts] = useState({});
-  // for edit modal
+  const [departments, setDepartments] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [users, setUsers] = useState([]);
+
+  // Document being edited and its unsaved access settings.
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const [path, setPath] = useState("");
   const [pathError, setPathError] = useState("");
@@ -144,14 +154,15 @@ export default function DocumentsManager() {
   const loadDocuments = useCallback(async () => {
     try {
       const result = await getDocuments();
-      // Map backend fields to the table row schema
       setDocs(
         result.map((d) => ({
           id: d.document_uuid,
           title: d.document_name,
-          category: d.category || "General",
+          departmentCode: d.department_code,
+          classification: d.classification,
+          access: d.access,
+          needsClassification: d.needs_classification,
           updated: new Date(d.last_update).toLocaleDateString(),
-          roles: d.allowed_roles || [],
         })),
       );
     } catch (err) {
@@ -161,7 +172,14 @@ export default function DocumentsManager() {
 
   useEffect(() => {
     loadDocuments();
+    // Pickers for the access editor; the users list is optional.
+    getDepartments().then(setDepartments).catch(() => {});
+    getRoles().then(setRoles).catch(() => {});
+    getUsers().then((r) => setUsers(r.items)).catch(() => {});
   }, [loadDocuments]);
+
+  const deptName = (code) =>
+    departments.find((d) => d.code === code)?.name ?? code;
 
   // Open the delete confirmation modal
   const openDeleteModal = (doc) => {
@@ -217,7 +235,7 @@ export default function DocumentsManager() {
       const result = await scanFolder(value);
       await loadDocuments();
       setSubmittedPath(
-        `Scanned successfully: ${result.created_count} new, ${result.existing_count} existing.`,
+        `Folder processed: ${result.created_count} new, ${result.existing_count} existing, ${result.ingested_count} ingested, ${result.ingestion_errors?.length || 0} ingestion errors.`,
       );
       setPath("");
     } catch (err) {
@@ -228,38 +246,44 @@ export default function DocumentsManager() {
   };
 
   const startEdit = (doc) => {
-    setDrafts((prev) => ({ ...prev, [doc.id]: [...doc.roles] }));
+    setDraft({
+      department_code: doc.departmentCode ?? "",
+      classification: doc.classification,
+      departments: [...(doc.access?.departments ?? [])],
+      roles: [...(doc.access?.roles ?? [])],
+      users: [...(doc.access?.users ?? [])],
+    });
+    setSaveError("");
     setSelectedDoc(doc);
   };
 
   const closeModal = () => {
-    if (selectedDoc) {
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[selectedDoc.id];
-        return next;
-      });
-    }
-
+    if (saving) return;
     setSelectedDoc(null);
+    setDraft(null);
   };
 
-  const setDraft = (id, roles) =>
-    setDrafts((prev) => ({ ...prev, [id]: roles }));
+  const submitAccess = async () => {
+    setSaving(true);
+    setSaveError("");
 
-  const submitRoles = async (id) => {
     try {
-      await updateDocumentPermissions(id, drafts[id] || []);
-      setDocs((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, roles: drafts[id] } : d)),
-      );
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
+      await updateDocumentAccess(selectedDoc.id, {
+        department_code: draft.department_code || null,
+        classification: draft.classification,
+        access: {
+          departments: draft.departments,
+          roles: draft.roles,
+          users: draft.users,
+        },
       });
+      await loadDocuments();
+      setSelectedDoc(null);
+      setDraft(null);
     } catch (err) {
-      alert(err.message || "Failed to update permissions.");
+      setSaveError(err.message || "Failed to update access.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -267,31 +291,31 @@ export default function DocumentsManager() {
     <div className="space-y-8">
       {/* Title row */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">
           Corporate Documents &amp; RAG Validation
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Index corporate knowledge bases from a folder and control which user
-          roles can access each document.
+        <p className="mt-1 text-sm text-ink-3">
+          Index corporate knowledge bases from a folder and set the owning department,
+          classification and explicit access for each document.
         </p>
       </div>
 
       {/* Folder path */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-card border border-line bg-surface p-6 shadow-card">
         <form onSubmit={handlePathSubmit} noValidate>
           <label
             htmlFor="folder-path"
-            className="block text-base font-semibold text-slate-900"
+            className="block text-base font-semibold text-ink"
           >
             Document Folder Path
           </label>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-ink-3">
             Enter the path to the folder that contains the documents to index.
           </p>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
-              <FolderIcon className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400" />
+              <FolderIcon className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-ink-3" />
               <input
                 id="folder-path"
                 type="text"
@@ -299,17 +323,17 @@ export default function DocumentsManager() {
                 onChange={(e) => setPath(e.target.value)}
                 placeholder="/mnt/company-docs/hr-policies"
                 aria-invalid={!!pathError}
-                className={`block w-full rounded-xl border bg-slate-50 py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${
+                className={`block w-full rounded-control border bg-surface-2 py-3 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-ink-3 focus:bg-surface focus:ring-4 ${
                   pathError
-                    ? "border-red-300 focus:border-red-500 focus:ring-red-100"
-                    : "border-slate-200 focus:border-indigo-500 focus:ring-indigo-100"
+                    ? "border-danger/30 focus:border-danger focus:ring-danger/25"
+                    : "border-line focus:border-brand focus:ring-brand/25"
                 }`}
               />
             </div>
             <button
               type="submit"
               disabled={submitting}
-              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer"
+              className="flex items-center justify-center gap-2 rounded-control bg-brand px-6 py-3 text-sm font-semibold text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/25 disabled:opacity-70"
             >
               {submitting && <RefreshIcon className="h-4 w-4 animate-spin" />}
               {submitting ? "Submitting..." : "Submit"}
@@ -317,14 +341,14 @@ export default function DocumentsManager() {
           </div>
 
           {pathError && (
-            <p role="alert" className="mt-2 text-sm text-red-600">
+            <p role="alert" className="mt-2 text-sm text-danger">
               {pathError}
             </p>
           )}
           {submittedPath && (
             <p
               role="status"
-              className="mt-3 flex items-center gap-1.5 text-sm text-emerald-600"
+              className="mt-3 flex items-center gap-1.5 text-sm text-success"
             >
               <CheckCircleIcon className="h-4 w-4 shrink-0" />
               <span className="break-all">
@@ -336,12 +360,12 @@ export default function DocumentsManager() {
       </section>
 
       {/* Table */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
         <div className="flex items-center justify-between gap-4 px-6 py-5">
-          <h2 className="text-base font-semibold text-slate-900">
+          <h2 className="text-base font-semibold text-ink">
             Ingested Document Knowledge States
           </h2>
-          <p className="shrink-0 text-sm text-slate-400">
+          <p className="shrink-0 text-sm text-ink-3">
             Showing all {docs.length} documents
           </p>
         </div>
@@ -349,161 +373,207 @@ export default function DocumentsManager() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-250 text-left">
             <thead>
-              <tr className="border-y border-slate-200 bg-slate-50">
+              <tr className="border-y border-line bg-surface-2">
                 {COLUMNS.map((c) => (
                   <th
                     key={c.label}
                     scope="col"
-                    className={`px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 ${c.className}`}
+                    className={`px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-ink-3 ${c.className}`}
                   >
                     {c.label}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {docs.length === 0 && (
                 <tr>
                   <td
                     colSpan={COLUMNS.length}
-                    className="px-6 py-10 text-center text-sm text-slate-400"
+                    className="px-6 py-10 text-center text-sm text-ink-3"
                   >
                     No documents yet. Submit a folder path to get started.
                   </td>
                 </tr>
               )}
-              {docs.map((d) => {
-                const draft = drafts[d.id];
-                const editing = draft !== undefined;
-                return (
-                  <tr key={d.id} className="transition hover:bg-slate-50/60">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3 text-sm font-medium text-slate-800">
-                        <FileIcon className="h-4.5 w-4.5 shrink-0 text-red-500" />
-                        {d.title}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${CATEGORY_TONES[d.category] ?? CATEGORY_TONES.General}`}
-                      >
-                        {d.category}
+              {docs.map((d) => (
+                <tr key={d.id} className="transition hover:bg-surface-2/60">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3 text-sm font-medium text-ink">
+                      <FileIcon className="h-4.5 w-4.5 shrink-0 text-danger" />
+                      {d.title}
+                    </div>
+                    {d.needsClassification && (
+                      <span className="mt-1 inline-block rounded-full bg-warning-soft px-2 py-0.5 text-micro font-semibold uppercase tracking-wide text-warning">
+                        Needs Classification
                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-400">
-                      {d.updated}
-                    </td>
-                    <td className="px-6 py-4">
-                      {d.roles.length > 0 ? (
-                        <div className="flex max-w-xs flex-wrap gap-1.5">
-                          {d.roles.map((r) => (
-                            <RoleTag key={r}>{r}</RoleTag>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-slate-400">
-                          No roles assigned
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-4">
-                        {/* <button
-                          type="button"
-                          disabled
-                          title="Preview is not available yet"
-                          className={`${linkBtn} cursor-not-allowed text-slate-300`}
-                        >
-                          Preview
-                        </button> */}
-                        <button
-                          type="button"
-                          onClick={() => startEdit(d)}
-                          // disabled={editing}
-                          className={`${linkBtn} text-indigo-600 hover:text-indigo-700 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:text-slate-300 cursor-pointer`}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openDeleteModal(d)}
-                          className={`${linkBtn} text-red-400 hover:text-red-700 cursor-pointer`}
-                        >
-                          Delete
-                        </button>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-ink-2">
+                    {d.departmentCode ? deptName(d.departmentCode) : "—"}
+                  </td>
+                  <td className="px-6 py-4">
+                    <ClassificationBadge value={d.classification} />
+                  </td>
+                  <td className="px-6 py-4">
+                    {(d.access?.departments?.length ?? 0) +
+                      (d.access?.roles?.length ?? 0) +
+                      (d.access?.users?.length ?? 0) >
+                    0 ? (
+                      <div className="flex max-w-xs flex-wrap gap-1.5">
+                        {d.access.departments.map((c) => (
+                          <Tag key={`d-${c}`}>{deptName(c)}</Tag>
+                        ))}
+                        {d.access.roles.map((c) => (
+                          <Tag key={`r-${c}`}>
+                            {roles.find((r) => r.code === c)?.name ?? c}
+                          </Tag>
+                        ))}
+                        {d.access.users.map((u) => (
+                          <Tag key={`u-${u}`}>
+                            {displayName(users.find((x) => x.user_uuid === u)?.name) || "User"}
+                          </Tag>
+                        ))}
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                    ) : (
+                      <span className="text-sm text-ink-3">No explicit grants</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-ink-3">{d.updated}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-4">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(d)}
+                        className={`${linkBtn} text-brand-text hover:text-brand-text`}
+                      >
+                        Edit access
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openDeleteModal(d)}
+                        className={`${linkBtn} text-danger hover:text-danger`}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </section>
 
-      {selectedDoc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      {selectedDoc && draft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-document-title"
-            className="flex h-95 w-full max-w-lg flex-col rounded-2xl bg-white p-6 shadow-xl"
+            className="flex max-h-full w-full max-w-xl flex-col rounded-card bg-surface p-6 shadow-pop"
           >
-            {/* Modal header */}
-            <div className="mb-5 flex items-center justify-between">
-              <h2
-                id="edit-document-title"
-                className="text-lg font-semibold text-slate-900"
-              >
-                Edit Document Permissions
-              </h2>
-
+            <div className="mb-4 flex items-center justify-between">
+              <div className="min-w-0">
+                <h2
+                  id="edit-document-title"
+                  className="text-lg font-semibold text-ink"
+                >
+                  Edit Document Access
+                </h2>
+                <p className="truncate text-sm text-ink-3">{selectedDoc.title}</p>
+              </div>
               <button
                 type="button"
                 onClick={closeModal}
                 aria-label="Close modal"
-                className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+                className="rounded-control px-3 py-1 text-xl text-ink-3 hover:bg-surface-3 hover:text-ink"
               >
                 &times;
               </button>
             </div>
 
-            {/* Document name */}
-            {/* <p className="mb-2 text-sm text-slate-500">
-              Document: {selectedDoc.title}
-            </p> */}
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="doc-dept" className="mb-1.5 block text-sm font-medium text-ink-2">
+                    Owning department
+                  </label>
+                  <select
+                    id="doc-dept"
+                    value={draft.department_code}
+                    onChange={(e) => setDraft({ ...draft, department_code: e.target.value })}
+                    className={selectCls}
+                  >
+                    <option value="">None</option>
+                    {departments.map((d) => (
+                      <option key={d.code} value={d.code}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="doc-class" className="mb-1.5 block text-sm font-medium text-ink-2">
+                    Classification
+                  </label>
+                  <select
+                    id="doc-class"
+                    value={draft.classification}
+                    onChange={(e) => setDraft({ ...draft, classification: e.target.value })}
+                    className={selectCls}
+                  >
+                    {CLASSIFICATIONS.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="text-xs text-ink-3">
+                {CLASSIFICATIONS.find((c) => c.value === draft.classification)?.hint}.
+                Explicit grants below always apply, on top of the classification rule.
+              </p>
 
-            {/* Role selector */}
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Allowed User Roles
-            </label>
-
-            <div className="min-h-0 flex-1">
-              <RoleSelect
-                value={drafts[selectedDoc.id] || []}
-                onChange={(roles) => setDraft(selectedDoc.id, roles)}
+              <MultiSelect
+                label="Departments"
+                options={departments.map((d) => ({ value: d.code, label: d.name }))}
+                value={draft.departments}
+                onChange={(v) => setDraft({ ...draft, departments: v })}
+              />
+              <MultiSelect
+                label="Roles"
+                options={roles.map((r) => ({ value: r.code, label: r.name }))}
+                value={draft.roles}
+                onChange={(v) => setDraft({ ...draft, roles: v })}
+              />
+              <MultiSelect
+                label="Specific users"
+                options={users.map((u) => ({ value: u.user_uuid, label: `${displayName(u.name)} (${u.role_name})` }))}
+                value={draft.users}
+                onChange={(v) => setDraft({ ...draft, users: v })}
               />
             </div>
 
-            {/* Modal footer */}
+            {saveError && (
+              <p role="alert" className="mt-4 rounded-control bg-danger-soft px-3 py-2 text-sm text-danger">
+                {saveError}
+              </p>
+            )}
+
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                disabled={saving}
+                className="rounded-control border border-line-strong px-4 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2 disabled:opacity-50"
               >
                 Close
               </button>
-
               <button
                 type="button"
-                onClick={async () => {
-                  await submitRoles(selectedDoc.id);
-                  setSelectedDoc(null);
-                }}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 cursor-pointer"
+                onClick={submitAccess}
+                disabled={saving}
+                className="rounded-control bg-brand px-4 py-2 text-sm font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
               >
-                Submit
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
@@ -513,7 +583,7 @@ export default function DocumentsManager() {
       {/* Delete Confirmation Modal */}
       {deleteDoc && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-overlay p-4"
           onClick={(e) => {
             // Close only when the backdrop itself is clicked
             if (e.target === e.currentTarget) {
@@ -526,13 +596,13 @@ export default function DocumentsManager() {
             aria-modal="true"
             aria-labelledby="delete-document-title"
             aria-describedby="delete-document-description"
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            className="w-full max-w-md rounded-card bg-surface p-6 shadow-pop"
           >
             {/* Modal Header */}
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-danger-soft">
                 <svg
-                  className="h-6 w-6 text-red-600"
+                  className="h-6 w-6 text-danger"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -550,18 +620,18 @@ export default function DocumentsManager() {
               <div className="min-w-0 flex-1">
                 <h2
                   id="delete-document-title"
-                  className="text-lg font-semibold text-slate-900"
+                  className="text-lg font-semibold text-ink"
                 >
                   Delete Document
                 </h2>
 
                 <p
                   id="delete-document-description"
-                  className="mt-2 text-sm leading-6 text-slate-500"
+                  className="mt-2 text-sm leading-6 text-ink-3"
                 >
                   Are you sure you want to delete{" "}
-                  <span className="wrap-break-words font-semibold text-slate-800">
-                    "{deleteDoc.title}"
+                  <span className="wrap-break-words font-semibold text-ink">
+                    &quot;{deleteDoc.title}&quot;
                   </span>
                   ? This action cannot be undone.
                 </p>
@@ -573,7 +643,7 @@ export default function DocumentsManager() {
                 onClick={closeDeleteModal}
                 disabled={deleting}
                 aria-label="Close delete modal"
-                className="rounded-lg px-2 py-1 text-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-control px-2 py-1 text-xl text-ink-3 transition hover:bg-surface-3 hover:text-ink disabled:opacity-50"
               >
                 &times;
               </button>
@@ -583,7 +653,7 @@ export default function DocumentsManager() {
             {deleteError && (
               <p
                 role="alert"
-                className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600"
+                className="mt-4 rounded-control bg-danger-soft px-3 py-2 text-sm text-danger"
               >
                 {deleteError}
               </p>
@@ -595,7 +665,7 @@ export default function DocumentsManager() {
                 type="button"
                 onClick={closeDeleteModal}
                 disabled={deleting}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-control border border-line-strong px-4 py-2 text-sm font-medium text-ink-2 transition hover:bg-surface-2 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -604,7 +674,7 @@ export default function DocumentsManager() {
                 type="button"
                 onClick={handleDelete}
                 disabled={deleting}
-                className="flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex items-center justify-center gap-2 rounded-control bg-danger px-4 py-2 text-sm font-semibold text-on-danger transition hover:bg-danger-hover disabled:opacity-60"
               >
                 {deleting && <RefreshIcon className="h-4 w-4 animate-spin" />}
 

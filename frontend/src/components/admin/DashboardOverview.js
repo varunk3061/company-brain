@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import StatCard from "./StatCard";
 import ActivityTable from "./ActivityTable";
 import { getDashboardData } from "@/services/dashboardService";
+import { FEATURES } from "@/config/features";
 
 // Numbers fall back to "0", text falls back to "-".
 const num = (value) =>
@@ -29,9 +30,6 @@ function timeAgo(value) {
 }
 
 function buildStats(stats = {}) {
-  const latency =
-    typeof stats.avg_latency_ms === "number" ? `${num(stats.avg_latency_ms)}ms` : "-";
-
   return [
     {
       id: "users",
@@ -47,20 +45,28 @@ function buildStats(stats = {}) {
       value: num(stats.indexed_documents),
       icon: "file",
       iconTone: "emerald",
-      note: { text: `${num(stats.documents_with_roles)} with access roles assigned`, tone: "good", icon: "check" },
+      note: { text: `${num(stats.documents_classified)} classified with access rules`, tone: "good", icon: "check" },
     },
     {
       id: "queries",
       label: "Daily RAG Queries",
       value: num(stats.daily_rag_queries),
+      comingSoon: !FEATURES.usageMetrics,
       icon: "chat",
       iconTone: "indigo",
-      note: { text: `Avg latency: ${latency}`, tone: "muted", icon: "none" },
+      note: {
+        text: FEATURES.usageMetrics
+          ? `Avg latency: ${num(stats.avg_latency_ms)}ms`
+          : "Not tracked yet",
+        tone: "muted",
+        icon: "none",
+      },
     },
     {
       id: "security",
       label: "System Security Status",
       value: text(stats.security_status),
+      comingSoon: !FEATURES.securityStatus,
       icon: "shield",
       iconTone: "emerald",
       note: { text: `${num(stats.blocked_users)} blocked accounts`, tone: "muted", icon: "none" },
@@ -106,7 +112,7 @@ export default function DashboardOverview() {
 
   return (
     <>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((s) => (
