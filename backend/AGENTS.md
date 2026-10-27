@@ -46,7 +46,10 @@ uvicorn main:app --reload --port 8000
 | `CORS_ORIGINS` | | Comma-separated origins; default `http://localhost:3000,http://127.0.0.1:3000` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | | Default `60` |
 | `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | ✅ (new installs) | Seed System Administrator (password ≥ 12 chars), created at startup only if no `users` admin **and** no legacy `admins` rows exist |
-| `DOCUMENTS_ROOT` | ✅ for scanning | Absolute path; folder scans are confined to this tree |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | ✅ for uploads | Private Cloudflare R2 bucket holding uploaded PDFs. API token: *Object Read & Write*, scoped to this bucket. Keys stay on the backend |
+| `MAX_UPLOAD_MB` | | Per-PDF upload limit; default `25` (keep `MAX_UPLOAD_MB` in `frontend/src/services/documentService.js` in step) |
+| `PRESIGNED_URL_TTL_SECONDS` | | Lifetime of "view PDF" links; default `300` (R2 max 7 days) |
+| `DOCUMENTS_ROOT` | legacy | Absolute path; only for the old server-side folder scan |
 | `GROQ_API_KEY`, `GROQ_MODEL` | ✅ for answers | Groq LLM used by `/api/rag/ask` (model defaults to `openai/gpt-oss-120b`) |
 
 The app **fails fast** at import time if required values are missing or weak. Never commit `.env`; keep `.env.example` in sync whenever you add a variable.
@@ -142,8 +145,10 @@ Tokens carry the user id only. Role, clearance and permissions are re-read on **
 | Method | Path | Permission | Description |
 |---|---|---|---|
 | POST | `/api/rag/ask` | signed in | `{question}` → `{answer, sources[{source, page, document_uuid}]}`. Retrieval is permission-filtered **inside** the `$vectorSearch` query; with no permitted evidence the LLM is not called and the answer is "I could not find this information in the accessible documents." |
-| POST | `/api/documents/scan-and-ingest` | `documents.manage` | Register PDFs in a folder, then chunk + embed them |
-| POST | `/api/documents/{uuid}/ingest` | `documents.manage` | (Re)process one registered PDF |
+| POST | `/api/documents/upload` | `documents.manage` | multipart `file` (one PDF ≤ `MAX_UPLOAD_MB`) → stored in R2 as `documents/<uuid>.pdf`, registered (`internal`, `needs_classification`), then chunked + embedded. 413 too large · 415 not a PDF · 422 unreadable/password-protected · 409 same content already uploaded. An ingestion failure is returned in `ingestion` (the file stays stored) |
+| GET | `/api/documents/{uuid}/view-url` | signed in | `{url, expires_in}`: presigned R2 link to the original PDF. Uses `can_view` (admins included); **404** when not allowed, identical to "not found" |
+| POST | `/api/documents/scan-and-ingest` | `documents.manage` | Legacy: register PDFs in a server folder, then chunk + embed them |
+| POST | `/api/documents/{uuid}/ingest` | `documents.manage` | (Re)process one registered PDF; uploaded PDFs are re-read from R2 (no re-upload) |
 
 **How it fits together.** `services/rag_service.py` (ingest) → `documents_chunk` (text, `embedding`, `classification`, `department_code`, `access`) → `services/retrieval_service.py` (`$vectorSearch` with `build_document_filter(ctx)`) → `services/llm_service.py` (Groq, cites `[Source: file, Page: N]`). Changing a document's access updates its chunks; deleting a document deletes them.
 
@@ -177,7 +182,7 @@ Heavy packages (LangChain, sentence-transformers, torch) are imported only when 
 | Method | Path | Permission | Description |
 |---|---|---|---|
 | GET | `/api/documents/` | signed in | Documents the caller may see (managers see all metadata, never content) |
-| POST | `/api/documents/scan-folder` | `documents.manage` | Register PDFs under `DOCUMENTS_ROOT` as `internal`, `needs_classification` |
+| POST | `/api/documents/scan-folder` | `documents.manage` | Legacy: register PDFs under `DOCUMENTS_ROOT` as `internal`, `needs_classification` |
 | PATCH | `/api/documents/{uuid}/access` | `documents.manage` | Set owner department, classification, explicit grants |
 | DELETE | `/api/documents/{uuid}` | `documents.manage` | Delete the record |
 
@@ -202,7 +207,7 @@ Implemented collections: `departments`, `roles`, `users`, `documents`, `audit_lo
 | `departments` | `department_uuid`, `code` (unique), `name`, `status` |
 | `roles` | `role_uuid`, `code` (unique), `name`, `department_code`, `clearance`, `permissions[]`, `status` |
 | `users` | `user_uuid`, `name`, `email` (unique), `password_hash`, `department_code`, `role_code`, `status` |
-| `documents` | `document_uuid`, `document_name`, `file_path` (internal), `department_code` (owner), `classification`, `access{departments[], roles[], users[]}`, `needs_classification`, `last_update` |
+| `documents` | `document_uuid`, `document_name`, `object_key` (internal, R2 key `documents/<uuid>.pdf`), `content_hash` (SHA-256, unique when present), `size_bytes`, `page_count`, `pdf_metadata{title, author, created_at}`, `uploaded_by`, `department_code` (owner), `classification`, `access{departments[], roles[], users[]}`, `needs_classification`, `status`, `chunk_count`, `last_update`. Legacy folder-scan rows have `file_path` (internal) instead of `object_key` |
 | `audit_log` | `ts`, `actor_uuid`, `action`, `target`, `before`, `after` |
 
 Target model for the remaining collections (change it, but record why):
@@ -261,7 +266,9 @@ A system prompt is not a defence. Document text is **data**: scan at ingestion (
 
 - Validate at the boundary with Pydantic (`extra="forbid"`, length limits, enums for roles/departments/status).
 - Passwords: bcrypt, 72-byte cap enforced, never logged or returned.
-- File system access confined to `DOCUMENTS_ROOT` with resolved-path checks (symlink-safe).
+- Original PDFs live in a **private** R2 bucket (no public r2.dev URL, no custom domain). Only the backend holds the keys; the browser gets 5-minute presigned links, issued after `can_view`. Object keys are built from the UUID, never from the uploaded file name.
+- Uploads are validated on the server (size, `%PDF-` header, readable, not password-protected); the frontend check is UX only.
+- Legacy folder scans: file system access confined to `DOCUMENTS_ROOT` with resolved-path checks (symlink-safe).
 - CORS: explicit origin allow-list from config — no `*` with credentials.
 - Rate-limit login and chat endpoints before production.
 - The audit log contains user queries; treat it as **confidential** (restricted read access, retention policy).
@@ -307,7 +314,7 @@ Rules:
 |---|---|
 | Auth | No login rate-limiting, no token revocation list (blocking a user does take effect immediately), HS256 shared secret |
 | RAG | Baseline only: one retrieval method (dense), no rerank, hybrid search, router or graph; uses LangChain wrappers for the embedding model and Groq, which the brief asks to avoid in the baseline (log what they hide before keeping them) |
-| Documents | No upload, versioning, approval workflow or validation pipeline yet; `needs_classification` docs are visible as `internal` until an admin classifies them |
+| Documents | No versioning, approval workflow or validation pipeline yet; scanned (image-only) PDFs are stored but not indexed (no OCR); `needs_classification` docs are visible as `internal` until an admin classifies them; deleting a document does not yet remove its Neo4j nodes |
 | Audit | Only admin changes are logged (viewable via `/audit-logs`); no query audit yet |
 | Org | Roles/departments cannot be deleted (deactivate only); `documents.approve` is stored but not enforced yet |
 | API | Routes are not versioned under `/api/v1` yet |

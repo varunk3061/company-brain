@@ -13,3 +13,4 @@ langchain-huggingface
 sentence-transformers
 pypdf
 neo4j
+boto3
