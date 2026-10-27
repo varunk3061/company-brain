@@ -100,8 +100,9 @@ def create_user(data: UserCreate, actor) -> dict:
     except DuplicateKeyError:
         raise _conflict("A user with this email already exists.")
 
+    user_target = f"{user['name']} ({user['email']})"
     audit_service.record(
-        actor, "user.create", user["user_uuid"],
+        actor, "user.create", user_target,
         after={"email": user["email"], "department_code": user["department_code"], "role_code": user["role_code"]},
     )
     return user_response(user)
@@ -163,8 +164,9 @@ def update_user(user_uuid: str, data: UserUpdate, actor) -> dict:
     if changes:
         changes["updated_at"] = _now()
         users_collection.update_one({"user_uuid": user_uuid}, {"$set": changes})
+        user_target = f"{user.get('name', '')} ({user.get('email', '')})".strip() or user_uuid
         audit_service.record(
-            actor, "user.update", user_uuid,
+            actor, "user.update", user_target,
             before={k: user.get(k) for k in changes if k != "updated_at"},
             after={k: v for k, v in changes.items() if k != "updated_at"},
         )
@@ -186,6 +188,7 @@ def delete_user(user_uuid: str, actor) -> dict:
         raise _conflict("You cannot delete your own account.")
 
     users_collection.delete_one({"user_uuid": user_uuid})
-    audit_service.record(actor, "user.delete", user_uuid, before={"email": user["email"]})
+    user_target = f"{user.get('name', '')} ({user.get('email', '')})".strip() or user_uuid
+    audit_service.record(actor, "user.delete", user_target, before={"email": user["email"]})
 
     return {"message": "User deleted successfully.", "user_uuid": user_uuid}

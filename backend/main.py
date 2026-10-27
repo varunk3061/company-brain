@@ -29,6 +29,8 @@ from routes.document_routes import router as document_router
 from routes.org_routes import router as org_router
 from routes.rag_routes import router as rag_router
 from routes.user_routes import router as user_router
+from routes.chat_routes import router as chat_router
+
 from services.org_seed import seed_org
 from utils.security import hash_password
 
@@ -118,6 +120,7 @@ app.include_router(user_router)
 app.include_router(dashboard_router)
 app.include_router(document_router)
 app.include_router(rag_router)
+app.include_router(chat_router)
 
 app.add_middleware(
     CORSMiddleware,

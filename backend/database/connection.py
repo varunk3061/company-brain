@@ -39,6 +39,9 @@ audit_log_collection = db["audit_log"]
 employees_collection = db["employee"]
 admins_collection = db["admins"]
 
+# For Chat History
+chat_conversations_collection = db["chat_conversations"]
+
 #----------------------------------------------------------------------------------------------------
 
 def create_indexes():
@@ -61,6 +64,15 @@ def create_indexes():
 
     documents_chunk_collection.create_index([("chunk_uuid", ASCENDING)], unique=True, name="unique_chunk_uuid")
     documents_chunk_collection.create_index([("document_uuid", ASCENDING)], name="document_uuid_index")
+
+    chat_conversations_collection.create_index(
+        [("user_uuid", ASCENDING), ("updated_at", -1)],
+        name="user_conversations_lookup"
+    )
+    chat_conversations_collection.create_index(
+        [("conversation_id", ASCENDING)],
+        unique=True, name="unique_conversation_id"
+    )
 
 #----------------------------------------------------------------------------------------------------
 

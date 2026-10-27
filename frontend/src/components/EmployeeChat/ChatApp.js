@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { getMyProfile } from "@/services/authService";
 import { getDocuments } from "@/services/documentService";
 import { getDepartments } from "@/services/orgService";
@@ -10,7 +12,7 @@ import { displayName, titleCase } from "@/lib/format";
 import ThemeSelect from "@/components/ui/ThemeSelect";
 import { ClassificationBadge } from "@/components/ui/Badge";
 import { ComingSoonNotice } from "@/components/ui/ComingSoon";
-import { useEffect, useRef, useState } from "react";
+import { getConversations, getConversation } from "@/services/chatService";
 
 import Sidebar from "./Sidebar";
 import { AssistantMessage, TypingMessage, UserMessage } from "./Message";
@@ -29,10 +31,12 @@ import {
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 // Real answer from the RAG backend (permission-filtered, with citations).
-async function askBrain(query) {
-  const data = await askCompanyBrain(query);
+async function askBrain(query, conversationId = null) {
+  const data = await askCompanyBrain(query, conversationId);
 
   return {
+    conversation_id: data.conversation_id,
+    num: data.num,
     id: uid(),
     role: "assistant",
     paragraphs: (data.answer || "No answer was returned.")
@@ -82,6 +86,19 @@ export default function ChatApp() {
       .then((result) => !cancelled && setDepartments(result))
       .catch(() => {});
 
+    getConversations()
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) {
+          const formatted = data.map((c) => ({
+            ...c,
+            id: c.id || c._id || c.conversation_id,
+            messages: c.messages || c.message || [],
+          }));
+          setConversations(formatted);
+        }
+      })
+      .catch(() => {});
+
     async function loadEmployeeProfile() {
       try {
         const profile = await getMyProfile();
@@ -129,7 +146,10 @@ export default function ChatApp() {
 
   // Resolve the active conversation.
   const active =
-    conversations.find((conversation) => conversation.id === activeId) ?? null;
+    conversations.find(
+      (conversation) =>
+        conversation.id === activeId || conversation._id === activeId,
+    ) ?? null;
 
   const messages = active?.messages ?? [];
 
@@ -155,9 +175,26 @@ export default function ChatApp() {
   };
 
   // Select an existing conversation.
-  const handleSelect = (id) => {
+  const handleSelect = async (id) => {
     setActiveId(id);
     setSidebarOpen(false);
+
+    // If messages are not loaded yet for this conversation, fetch them from backend
+    try {
+      const fullConv = await getConversation(id);
+      const incomingMessages = fullConv?.messages || fullConv?.message;
+      if (fullConv && incomingMessages) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === id || c._id === id
+              ? { ...c, messages: incomingMessages }
+              : c,
+          ),
+        );
+      }
+    } catch (err) {
+      console.error("Failed to load conversation message", err);
+    }
   };
 
   // Send a message and display the response.
@@ -211,18 +248,27 @@ export default function ChatApp() {
     setLoading(true);
 
     try {
-      const reply = await askBrain(query);
+      const reply = await askBrain(query, activeId);
+
+      const serverConvId = reply.conversation_id || convId;
+      const serverNum = reply.num;
 
       setConversations((previous) =>
         previous.map((conversation) =>
           conversation.id === convId
             ? {
                 ...conversation,
-                messages: [...conversation.messages, reply],
+                id: serverConvId,
+                num: serverNum ?? conversation.num,
+                messages: [...(conversation.messages || []), reply],
               }
             : conversation,
         ),
       );
+
+      if (!activeId && serverConvId) {
+        setActiveId(serverConvId);
+      }
     } catch (error) {
       const errorReply = {
         id: uid(),
@@ -273,7 +319,7 @@ export default function ChatApp() {
 
         message.sources?.forEach((source) =>
           lines.push(
-            `- ${source.file} (page ${source.page ?? "unknown"})`,
+            `- ${source.file || source.source} (page ${source.page ?? "unknown"})`,
           ),
         );
 
@@ -362,9 +408,7 @@ export default function ChatApp() {
                 {employeeName}
               </span>
 
-              <span className="block text-xs text-ink-3">
-                {employeeRole}
-              </span>
+              <span className="block text-xs text-ink-3">{employeeRole}</span>
             </span>
 
             <ChevronDownIcon className="h-4 w-4 text-ink-3" />
@@ -381,10 +425,12 @@ export default function ChatApp() {
 
               {employee && (
                 <div className="border-b border-line px-4 py-3">
-                  <p className="text-sm font-semibold text-ink">{employeeName}</p>
+                  <p className="text-sm font-semibold text-ink">
+                    {employeeName}
+                  </p>
                   <p className="text-xs text-ink-3">{employee.email}</p>
                   <p className="mt-1 text-xs text-ink-3">
-                    {employee.department_name} · {titleCase(employee.clearance)} clearance
+                    {employee.department_name}
                   </p>
                 </div>
               )}
@@ -453,7 +499,7 @@ export default function ChatApp() {
               )}
             </div>
 
-            <button
+            {/* <button
               type="button"
               onClick={handleExport}
               disabled={!active || !FEATURES.chatExport}
@@ -462,7 +508,7 @@ export default function ChatApp() {
             >
               <DownloadIcon className="h-4 w-4" />
               Export
-            </button>
+            </button> */}
           </div>
 
           {/* Messages */}
@@ -485,19 +531,28 @@ export default function ChatApp() {
                 {!FEATURES.questionAnswering && (
                   <div className="mt-6 w-full">
                     <ComingSoonNotice title="Question answering isn't connected yet">
-                      You can see what you are allowed to search below. Asking questions will be
-                      enabled once the retrieval service is ready.
+                      You can see what you are allowed to search below. Asking
+                      questions will be enabled once the retrieval service is
+                      ready.
                     </ComingSoonNotice>
                   </div>
                 )}
 
                 <section className="mt-6 w-full rounded-card border border-line bg-surface text-left shadow-card">
                   <div className="flex items-center justify-between border-b border-line px-5 py-3">
-                    <h3 className="text-sm font-semibold text-ink">Documents You Can Access</h3>
-                    {documents && <span className="text-xs text-ink-3">{documents.length}</span>}
+                    <h3 className="text-sm font-semibold text-ink">
+                      Documents You Can Access
+                    </h3>
+                    {documents && (
+                      <span className="text-xs text-ink-3">
+                        {documents.length}
+                      </span>
+                    )}
                   </div>
                   {documents === null && (
-                    <p className="px-5 py-6 text-sm text-ink-3">Loading documents…</p>
+                    <p className="px-5 py-6 text-sm text-ink-3">
+                      Loading documents…
+                    </p>
                   )}
                   {documents?.length === 0 && (
                     <p className="px-5 py-6 text-sm text-ink-3">
@@ -507,12 +562,19 @@ export default function ChatApp() {
                   {documents?.length > 0 && (
                     <ul className="max-h-72 divide-y divide-line overflow-y-auto">
                       {documents.map((doc) => (
-                        <li key={doc.document_uuid} className="flex items-center justify-between gap-3 px-5 py-3">
+                        <li
+                          key={doc.document_uuid}
+                          className="flex items-center justify-between gap-3 px-5 py-3"
+                        >
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-ink">{doc.document_name}</p>
+                            <p className="truncate text-sm font-medium text-ink">
+                              {doc.document_name}
+                            </p>
                             <p className="text-xs text-ink-3">
                               {doc.department_code
-                                ? departments.find((d) => d.code === doc.department_code)?.name ?? doc.department_code
+                                ? (departments.find(
+                                    (d) => d.code === doc.department_code,
+                                  )?.name ?? doc.department_code)
                                 : "No owning department"}
                             </p>
                           </div>
@@ -527,7 +589,11 @@ export default function ChatApp() {
               <div className="mx-auto max-w-5xl space-y-6">
                 {messages.map((message) =>
                   message.role === "user" ? (
-                    <UserMessage key={message.id} message={message} initials={employeeInitials} />
+                    <UserMessage
+                      key={message.id}
+                      message={message}
+                      initials={employeeInitials}
+                    />
                   ) : (
                     <AssistantMessage key={message.id} message={message} />
                   ),
@@ -551,12 +617,16 @@ export default function ChatApp() {
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 disabled={!FEATURES.questionAnswering}
-                placeholder={FEATURES.questionAnswering ? "Ask anything about company policies, projects, or documents…" : "Asking questions is coming soon"}
+                placeholder={
+                  FEATURES.questionAnswering
+                    ? "Ask anything about company policies, projects, or documents…"
+                    : "Asking questions is coming soon"
+                }
                 aria-label="Ask a question"
                 className="min-w-0 flex-1 bg-transparent py-1.5 text-sm text-ink outline-none placeholder:text-ink-3"
               />
 
-              <button
+              {/* <button
                 type="button"
                 disabled={!FEATURES.fileAttachments}
                 title={FEATURES.fileAttachments ? undefined : "Attachments are coming soon"}
@@ -564,11 +634,13 @@ export default function ChatApp() {
                 className="rounded-full p-2 text-ink-3 transition hover:text-ink-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <PaperclipIcon className="h-4.5 w-4.5" />
-              </button>
+              </button> */}
 
               <button
                 type="submit"
-                disabled={!input.trim() || loading || !FEATURES.questionAnswering}
+                disabled={
+                  !input.trim() || loading || !FEATURES.questionAnswering
+                }
                 aria-label="Send question"
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/25 disabled:opacity-50 disabled:shadow-none"
               >
@@ -576,10 +648,10 @@ export default function ChatApp() {
               </button>
             </form>
 
-            <p className="mt-2.5 text-center text-micro text-ink-3">
+            {/* <p className="mt-2.5 text-center text-micro text-ink-3">
               The Company Brain uses secure Retrieval-Augmented Generation with
               strict RBAC permissioning.
-            </p>
+            </p> */}
           </div>
         </main>
       </div>

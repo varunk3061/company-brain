@@ -244,8 +244,9 @@ def update_document_access(document_uuid: str, data: DocumentAccessUpdate, actor
         {"$set": {k: after[k] for k in ("department_code", "classification", "access")}},
     )
 
+    doc_name = before.get("document_name") or document_uuid
     audit_service.record(
-        actor, "document.access.update", document_uuid,
+        actor, "document.access.update", doc_name,
         before={k: before.get(k) for k in ("department_code", "classification", "access")},
         after={k: after[k] for k in ("department_code", "classification", "access")},
     )
@@ -268,7 +269,8 @@ def delete_document(document_uuid: str, actor: UserContext):
     documents_collection.delete_one({"document_uuid": document_uuid})
     documents_chunk_collection.delete_many({"document_uuid": document_uuid})
 
-    audit_service.record(actor, "document.delete", document_uuid, before={"document_name": doc.get("document_name")})
+    doc_name = doc.get("document_name") or document_uuid
+    audit_service.record(actor, "document.delete", doc_name, before={"document_name": doc_name})
 
     return {
         "message": "Document deleted successfully.",

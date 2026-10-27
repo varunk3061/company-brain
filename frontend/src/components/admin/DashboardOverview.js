@@ -62,15 +62,15 @@ function buildStats(stats = {}) {
         icon: "none",
       },
     },
-    {
-      id: "security",
-      label: "System Security Status",
-      value: text(stats.security_status),
-      comingSoon: !FEATURES.securityStatus,
-      icon: "shield",
-      iconTone: "emerald",
-      note: { text: `${num(stats.blocked_users)} blocked accounts`, tone: "muted", icon: "none" },
-    },
+    // {
+    //   id: "security",
+    //   label: "System Security Status",
+    //   value: text(stats.security_status),
+    //   comingSoon: !FEATURES.securityStatus,
+    //   icon: "shield",
+    //   iconTone: "emerald",
+    //   note: { text: `${num(stats.blocked_users)} blocked accounts`, tone: "muted", icon: "none" },
+    // },
   ];
 }
 

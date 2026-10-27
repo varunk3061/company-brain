@@ -34,7 +34,7 @@ export default function Sidebar({
       </div>
 
       {/* Scope: read-only until scope filtering exists */}
-      <div className="border-b border-line px-5 py-5">
+      {/* <div className="border-b border-line px-5 py-5">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-3">
             Knowledge Scope
@@ -50,7 +50,7 @@ export default function Sidebar({
             )}
           </span>
         </div>
-      </div>
+      </div> */}
 
       {/* Recent queries */}
       <nav aria-label="Recent queries" className="min-h-0 flex-1 overflow-y-auto px-3 py-5">
@@ -88,10 +88,10 @@ export default function Sidebar({
       <div className="flex items-center gap-2 border-t border-line px-6 py-4 text-xs text-ink-3">
         <span className="h-2 w-2 rounded-full bg-success" />
         <span>
-          Clearance:{" "}
-          <span className="font-semibold text-ink-2">
+          {/* Clearance:{" "} */}
+          {/* <span className="font-semibold text-ink-2">
             {profile ? titleCase(profile.clearance) : "—"}
-          </span>
+          </span> */}
           {profile && <> · {profile.department_name}</>}
         </span>
       </div>
