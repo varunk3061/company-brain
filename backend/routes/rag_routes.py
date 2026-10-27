@@ -23,7 +23,7 @@ def ask_question(request: AskQuestionRequest, ctx: UserContext = Depends(get_cur
     if not question:
         raise HTTPException(status_code=422, detail="Question cannot be empty.")
 
-    chunks = retrieve_relevant_chunks(question=question, ctx=ctx, limit=5)
+    chunks = retrieve_relevant_chunks(question=question, ctx=ctx, limit=10,max_per_document=4)
 
     # Same text for "nothing exists" and "nothing you may see": a refusal must not reveal which it is.
     if not chunks:

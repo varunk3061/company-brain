@@ -15,6 +15,13 @@ from database.connection import (
     check_database_connection,
     users_collection,
 )
+
+from database.neo4j_connection import (
+    verify_neo4j_connection,
+    close_neo4j_connection,
+)
+from services.graph_service import initialize_graph
+
 from routes.audit_routes import router as audit_router
 from routes.auth_routes import router as auth_router
 from routes.dashboard_routes import router as dashboard_router
@@ -83,7 +90,18 @@ async def lifespan(app: FastAPI):
     seed_org()
     create_initial_admin()
 
-    yield
+    try:
+        verify_neo4j_connection()
+        initialize_graph()
+        print("Neo4j connected and graph constraints initialized.")
+    except Exception as error:
+        print(f"Neo4j initialization failed: {error}")
+        raise
+
+    try:
+        yield
+    finally:
+        close_neo4j_connection()
 
 #------------------------------------------------------------------------------------------------
 
