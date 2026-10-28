@@ -26,6 +26,7 @@ import { getUsers } from "@/services/userService";
 import Badge, { ClassificationBadge } from "@/components/ui/Badge";
 import DepartmentBadge from "@/components/ui/DepartmentBadge";
 import IconButton from "@/components/ui/IconButton";
+import Pagination, { PAGE_SIZE } from "@/components/ui/Pagination";
 import { displayName, formatDate } from "@/lib/format";
 
 const CLASSIFICATIONS = [
@@ -39,13 +40,14 @@ const CLASSIFICATIONS = [
   { value: "restricted", label: "Restricted", hint: "Explicit grants only" },
 ];
 
+// Fixed widths (table-fixed) so columns never resize when filters change the rows.
 const COLUMNS = [
   { label: "Document Title", className: "" },
-  { label: "Owner Department", className: "" },
-  { label: "Classification", className: "" },
-  { label: "Explicit Access", className: "" },
-  { label: "Last Update", className: "" },
-  { label: "Actions", className: "text-right" },
+  { label: "Owner Department", className: "w-44" },
+  { label: "Classification", className: "w-36" },
+  { label: "Explicit Access", className: "w-80" },
+  { label: "Last Update", className: "w-32" },
+  { label: "Actions", className: "w-28 text-right" },
 ];
 
 const selectCls =
@@ -210,6 +212,7 @@ export default function DocumentsManager() {
   const [ownerFilter, setOwnerFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
   const [accessDeptFilter, setAccessDeptFilter] = useState("");
+  const [page, setPage] = useState(1);
 
   // PDF uploads (files go to the backend, which stores them in the private bucket)
   const [uploads, setUploads] = useState([]);
@@ -269,6 +272,18 @@ export default function DocumentsManager() {
     setOwnerFilter("");
     setClassFilter("");
     setAccessDeptFilter("");
+    setPage(1);
+  };
+
+  // Client-side pagination; clamp so deleting the last row of a page falls back a page.
+  const totalPages = Math.max(1, Math.ceil(filteredDocs.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageDocs = filteredDocs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Any filter change starts again from page 1.
+  const withPageReset = (setter) => (e) => {
+    setter(e.target.value);
+    setPage(1);
   };
 
   // Ask the backend for a short-lived link to the stored PDF (it checks access), then show it in the modal.
@@ -632,7 +647,7 @@ export default function DocumentsManager() {
             <input
               type="search"
               value={titleQuery}
-              onChange={(e) => setTitleQuery(e.target.value)}
+              onChange={withPageReset(setTitleQuery)}
               placeholder="Search by document title..."
               aria-label="Filter by document title"
               className={`${filterCls} pl-10 pr-4`}
@@ -640,7 +655,7 @@ export default function DocumentsManager() {
           </div>
           <select
             value={ownerFilter}
-            onChange={(e) => setOwnerFilter(e.target.value)}
+            onChange={withPageReset(setOwnerFilter)}
             aria-label="Filter by owner department"
             className={`${filterCls} px-4`}
           >
@@ -652,7 +667,7 @@ export default function DocumentsManager() {
           </select>
           <select
             value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
+            onChange={withPageReset(setClassFilter)}
             aria-label="Filter by classification"
             className={`${filterCls} px-4`}
           >
@@ -663,7 +678,7 @@ export default function DocumentsManager() {
           </select>
           <select
             value={accessDeptFilter}
-            onChange={(e) => setAccessDeptFilter(e.target.value)}
+            onChange={withPageReset(setAccessDeptFilter)}
             aria-label="Filter by department with access"
             className={`${filterCls} px-4`}
           >
@@ -672,20 +687,24 @@ export default function DocumentsManager() {
               <option key={d.code} value={d.code}>{d.name}</option>
             ))}
           </select>
-          {filtering && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="inline-flex items-center gap-1.5 justify-self-start rounded-control px-3 py-2 text-sm font-medium text-ink-3 transition hover:bg-surface-3 hover:text-ink"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-              Clear filters
-            </button>
-          )}
+          {/* Always rendered (hidden when unused) so the filter area never changes size. */}
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!filtering}
+            aria-hidden={!filtering}
+            tabIndex={filtering ? 0 : -1}
+            className={`inline-flex items-center gap-1.5 justify-self-start rounded-control px-3 py-2 text-sm font-medium text-ink-3 transition hover:bg-surface-3 hover:text-ink ${
+              filtering ? "" : "invisible"
+            }`}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+            Clear filters
+          </button>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-250 text-left">
+          <table className="w-full min-w-275 table-fixed text-left">
             <thead>
               <tr className="border-y border-line bg-surface-2">
                 {COLUMNS.map((c) => (
@@ -720,7 +739,7 @@ export default function DocumentsManager() {
                   </td>
                 </tr>
               )}
-              {filteredDocs.map((d) => (
+              {pageDocs.map((d) => (
                 <tr key={d.id} className="transition hover:bg-surface-2/60">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3 text-sm font-medium text-ink">
@@ -756,7 +775,7 @@ export default function DocumentsManager() {
                   <td className="px-6 py-4">
                     <ClassificationBadge value={d.classification} />
                   </td>
-                  <td className="min-w-80 px-6 py-4">
+                  <td className="px-6 py-4">
                     {(d.access?.departments?.length ?? 0) +
                       (d.access?.roles?.length ?? 0) +
                       (d.access?.users?.length ?? 0) >
@@ -808,6 +827,8 @@ export default function DocumentsManager() {
             </tbody>
           </table>
         </div>
+
+        <Pagination page={currentPage} total={filteredDocs.length} onPageChange={setPage} noun="documents" />
       </section>
 
       {selectedDoc && draft && (

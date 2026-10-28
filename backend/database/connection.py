@@ -44,6 +44,15 @@ chat_conversations_collection = db["chat_conversations"]
 
 #----------------------------------------------------------------------------------------------------
 
+for idx in documents_collection.list_indexes():
+    keys = list(idx["key"].keys())
+    if idx.get("unique") and keys == ["file_path"] and "partialFilterExpression" not in idx:
+        documents_collection.drop_index(idx["name"])
+documents_collection.create_index(
+    [("file_path", ASCENDING)], unique=True, name="unique_file_path",
+    partialFilterExpression={"file_path": {"$type": "string"}},
+)
+
 def create_indexes():
     """Create the unique and lookup indexes the access model relies on."""
 

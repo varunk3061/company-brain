@@ -3,10 +3,17 @@
 import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
+import Pagination, { PAGE_SIZE } from "@/components/ui/Pagination";
 import { getAuditLogs } from "@/services/auditService";
 import { actionLabel, displayName, formatDate, formatDateTime, formatTime } from "@/lib/format";
 
-const COLUMNS = ["Time", "Actor", "Action", "Target"];
+// Fixed widths (table-fixed) so columns never resize when filters change the rows.
+const COLUMNS = [
+  { label: "Time", className: "w-40" },
+  { label: "Actor", className: "w-52" },
+  { label: "Action", className: "w-56" },
+  { label: "Target", className: "" },
+];
 
 // Each kind of action gets its own colour, using the existing theme tokens only.
 // Exact actions first, then the verb at the end of the action ("user.create" -> "create").
@@ -51,7 +58,7 @@ export default function AuditLogs() {
   useEffect(() => {
     let active = true;
 
-    getAuditLogs(page, 25, { action, actor })
+    getAuditLogs(page, PAGE_SIZE, { action, actor })
       .then((result) => {
         if (active) {
           setData(result);
@@ -68,7 +75,6 @@ export default function AuditLogs() {
     };
   }, [page, action, actor]);
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   const filtering = Boolean(action || actor);
 
   const clearFilters = () => {
@@ -126,25 +132,33 @@ export default function AuditLogs() {
             ))}
           </select>
 
-          {filtering && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="inline-flex items-center gap-1.5 self-start rounded-control px-3 py-2 text-sm font-medium text-ink-3 transition hover:bg-surface-3 hover:text-ink sm:self-auto"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-              Clear filters
-            </button>
-          )}
+          {/* Always rendered (hidden when unused) so the filter row never changes size. */}
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!filtering}
+            aria-hidden={!filtering}
+            tabIndex={filtering ? 0 : -1}
+            className={`inline-flex items-center gap-1.5 self-start rounded-control px-3 py-2 text-sm font-medium text-ink-3 transition hover:bg-surface-3 hover:text-ink sm:self-auto ${
+              filtering ? "" : "invisible"
+            }`}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+            Clear filters
+          </button>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-175 text-left">
+          <table className="w-full min-w-200 table-fixed text-left">
             <thead>
               <tr className="border-y border-line bg-surface-2">
                 {COLUMNS.map((column) => (
-                  <th key={column} scope="col" className="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-ink-3">
-                    {column}
+                  <th
+                    key={column.label}
+                    scope="col"
+                    className={`px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-ink-3 ${column.className}`}
+                  >
+                    {column.label}
                   </th>
                 ))}
               </tr>
@@ -170,41 +184,19 @@ export default function AuditLogs() {
                     <span className="block text-sm text-ink-2">{formatDate(row.ts)}</span>
                     <span className="block text-xs text-ink-3">{formatTime(row.ts)}</span>
                   </td>
-                  <td className="px-6 py-4 text-sm font-medium text-ink">{displayName(row.actor_name)}</td>
+                  <td className="truncate px-6 py-4 text-sm font-medium text-ink" title={displayName(row.actor_name)}>{displayName(row.actor_name)}</td>
                   <td className="px-6 py-4">
                     <Badge tone={actionTone(row.action)}>{actionLabel(row.action)}</Badge>
                   </td>
-                  <td className="max-w-xs truncate px-6 py-4 text-sm text-ink-2" title={row.target}>{row.target}</td>
+                  <td className="truncate px-6 py-4 text-sm text-ink-2" title={row.target}>{row.target}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {data && data.total > data.page_size && (
-          <div className="flex items-center justify-between border-t border-line px-6 py-3 text-sm text-ink-3">
-            <span>
-              Page {data.page} of {totalPages} · {data.total} entries
-            </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="rounded-control border border-line px-3 py-1.5 font-medium text-ink-2 hover:bg-surface-3 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="rounded-control border border-line px-3 py-1.5 font-medium text-ink-2 hover:bg-surface-3 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+        {data && (
+          <Pagination page={data.page} pageSize={data.page_size} total={data.total} onPageChange={setPage} noun="entries" />
         )}
       </section>
     </div>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { ChevronDownIcon, SearchIcon, UserPlusIcon } from "../icons";
 import UserModal from "./UserModal";
 import Badge from "@/components/ui/Badge";
 import IconButton from "@/components/ui/IconButton";
+import Pagination, { PAGE_SIZE } from "@/components/ui/Pagination";
 import DepartmentBadge from "@/components/ui/DepartmentBadge";
 import { displayName } from "@/lib/format";
 import { createUser, getUsers, updateUser, deleteUser } from "@/services/userService";
@@ -19,14 +20,18 @@ const initialsOf = (name = "") =>
     .map((word) => word[0].toUpperCase())
     .join("");
 
+// Fixed widths (table-fixed) so columns never resize when filters change the rows.
 const COLUMNS = [
-  "Name",
-  "Email",
-  "Department",
-  "Role",
-  "Status",
-  "Actions",
+  { label: "Name", className: "" },
+  { label: "Email", className: "" },
+  { label: "Department", className: "w-44" },
+  { label: "Role", className: "w-44" },
+  { label: "Status", className: "w-28" },
+  { label: "Actions", className: "w-40 text-right" },
 ];
+
+const filterCls =
+  "block w-full rounded-control border border-line bg-surface-2 py-2.5 text-sm text-ink outline-none transition placeholder:text-ink-3 focus:border-brand focus:bg-surface focus:ring-4 focus:ring-brand/25";
 
 function normalizeUser(user) {
   return {
@@ -43,8 +48,12 @@ function normalizeUser(user) {
 
 export default function UsersManager() {
   const [users, setUsers] = useState([]);
-  const [query, setQuery] = useState("");
-  const [dept, setDept] = useState("All Departments");
+  // Filters
+  const [nameQuery, setNameQuery] = useState("");
+  const [emailQuery, setEmailQuery] = useState("");
+  const [dept, setDept] = useState("");
+  const [role, setRole] = useState("");
+  const [page, setPage] = useState(1);
   const [departments, setDepartments] = useState([]);
   const [roles, setRoles] = useState([]);
   const [modal, setModal] = useState(null);
@@ -78,20 +87,38 @@ export default function UsersManager() {
   }, [loadEmployees]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const name = nameQuery.trim().toLowerCase();
+    const email = emailQuery.trim().toLowerCase();
 
-    return users.filter((user) => {
-      const matchesDept =
-        dept === "All Departments" || user.departmentCode === dept;
+    return users.filter(
+      (user) =>
+        (!name || user.name.toLowerCase().includes(name)) &&
+        (!email || (user.email ?? "").toLowerCase().includes(email)) &&
+        (!dept || user.departmentCode === dept) &&
+        (!role || user.roleCode === role),
+    );
+  }, [users, nameQuery, emailQuery, dept, role]);
 
-      const matchesQuery =
-        !q ||
-        user.name.toLowerCase().includes(q) ||
-        user.email.toLowerCase().includes(q);
+  const filtering = Boolean(nameQuery.trim() || emailQuery.trim() || dept || role);
 
-      return matchesDept && matchesQuery;
-    });
-  }, [users, query, dept]);
+  // Client-side pagination; clamp so deleting the last row of a page falls back a page.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageUsers = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Any filter change starts again from page 1.
+  const withPageReset = (setter) => (event) => {
+    setter(event.target.value);
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setNameQuery("");
+    setEmailQuery("");
+    setDept("");
+    setRole("");
+    setPage(1);
+  };
 
   const editingUser = modal?.user ?? null;
 
@@ -193,53 +220,100 @@ export default function UsersManager() {
       )}
 
       <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full sm:max-w-sm">
+        {/* Filters */}
+        <div className="grid gap-3 px-5 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="relative">
             <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
-
             <input
               type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search users by name or email..."
-              aria-label="Search users"
-              className="block w-full rounded-control border border-line bg-surface-2 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-ink-3 focus:border-brand focus:bg-surface focus:ring-4 focus:ring-brand/25"
+              value={nameQuery}
+              onChange={withPageReset(setNameQuery)}
+              placeholder="Search by name..."
+              aria-label="Filter by name"
+              className={`${filterCls} pl-10 pr-4`}
+            />
+          </div>
+
+          <div className="relative">
+            <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
+            <input
+              type="search"
+              value={emailQuery}
+              onChange={withPageReset(setEmailQuery)}
+              placeholder="Search by email..."
+              aria-label="Filter by email"
+              className={`${filterCls} pl-10 pr-4`}
             />
           </div>
 
           <div className="relative">
             <select
               value={dept}
-              onChange={(event) => setDept(event.target.value)}
+              onChange={withPageReset(setDept)}
               aria-label="Filter by department"
-              className="w-full appearance-none rounded-control border border-line bg-surface-2 py-2.5 pl-4 pr-10 text-sm text-ink-2 outline-none transition focus:border-brand focus:bg-surface focus:ring-4 focus:ring-brand/25 sm:w-auto"
+              className={`${filterCls} appearance-none pl-4 pr-10`}
             >
-              <option value="All Departments">All Departments</option>
-
+              <option value="">All Departments</option>
               {departments.map((department) => (
                 <option key={department.code} value={department.code}>
                   {department.name}
                 </option>
               ))}
             </select>
+            <ChevronDownIcon className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
+          </div>
 
-            <ChevronDownIcon className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3 " />
+          <div className="relative">
+            <select
+              value={role}
+              onChange={withPageReset(setRole)}
+              aria-label="Filter by role"
+              className={`${filterCls} appearance-none pl-4 pr-10`}
+            >
+              <option value="">All Roles</option>
+              {roles.map((r) => (
+                <option key={r.code} value={r.code}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDownIcon className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
           </div>
         </div>
 
+        {/* Always rendered (hidden when unused) so the filter area never changes size. */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3">
+          <p className="text-sm text-ink-3">
+            {filtering
+              ? `Showing ${filtered.length} of ${users.length} users`
+              : `Showing all ${users.length} users`}
+          </p>
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!filtering}
+            aria-hidden={!filtering}
+            tabIndex={filtering ? 0 : -1}
+            className={`inline-flex items-center gap-1.5 rounded-control px-3 py-1.5 text-sm font-medium text-ink-3 transition hover:bg-surface-3 hover:text-ink ${
+              filtering ? "" : "invisible"
+            }`}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+            Clear filters
+          </button>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full min-w-225 text-left">
+          <table className="w-full min-w-250 table-fixed text-left">
             <thead>
               <tr className="border-y border-line bg-surface-2">
                 {COLUMNS.map((column) => (
                   <th
-                    key={column}
+                    key={column.label}
                     scope="col"
-                    className={`px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-ink-3 ${
-                      column === "Actions" ? "text-right" : ""
-                    }`}
+                    className={`px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-ink-3 ${column.className}`}
                   >
-                    {column}
+                    {column.label}
                   </th>
                 ))}
               </tr>
@@ -263,13 +337,13 @@ export default function UsersManager() {
                     colSpan={COLUMNS.length}
                     className="px-6 py-10 text-center text-sm text-ink-3"
                   >
-                    No users match your search.
+                    {filtering ? "No users match these filters." : "No users yet."}
                   </td>
                 </tr>
               )}
 
               {!loading &&
-                filtered.map((user) => {
+                pageUsers.map((user) => {
                   const revoked = user.status === "Revoked";
 
                   return (
@@ -286,7 +360,8 @@ export default function UsersManager() {
                           </span>
 
                           <span
-                            className={`text-sm font-semibold ${
+                            title={user.name}
+                            className={`min-w-0 truncate text-sm font-semibold ${
                               revoked ? "text-ink-3" : "text-ink"
                             }`}
                           >
@@ -295,7 +370,7 @@ export default function UsersManager() {
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 text-sm text-ink-3">
+                      <td className="truncate px-6 py-4 text-sm text-ink-3" title={user.email}>
                         {user.email}
                       </td>
 
@@ -346,6 +421,15 @@ export default function UsersManager() {
             </tbody>
           </table>
         </div>
+
+        {!loading && (
+          <Pagination
+            page={currentPage}
+            total={filtered.length}
+            onPageChange={setPage}
+            noun="users"
+          />
+        )}
       </section>
 
       {modal && (

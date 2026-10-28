@@ -165,7 +165,7 @@ export default function AdminShell({ children }) {
           onNavigate={() => setSidebarOpen(false)}
         />
 
-        <main className="min-w-0 flex-1 overflow-y-auto bg-surface-2 px-4 py-8 sm:px-8 lg:px-10">
+        <main className="scrollbar-stable min-w-0 flex-1 overflow-y-auto bg-surface-2 px-4 py-8 sm:px-8 lg:px-10">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>

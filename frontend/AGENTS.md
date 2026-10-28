@@ -166,13 +166,15 @@ Never use raw palette classes (`slate-*`, `indigo-*`, `red-*`, `white`, `black`�
 
 **Audit action colours.** `AuditLogs` maps each action to an existing `Badge` tone (no new colours): create → `success`, upload → `brand`, update → `info`, delete → `danger`, `document.access.update` → `warning`, `document.view` → `neutral`, `rag.ask` → `cat-2`. Add new actions to `ACTION_TONE` / `VERB_TONE` there.
 
-**Table filters.** Users: search by name or email + department. Documents: title search + owner department + classification + access department (client-side over the loaded list). Audit logs: actor search (debounced 300 ms) + action dropdown, filtered on the server (`/audit-logs?action=&actor=`) so pagination stays correct. Each filtered view has a "Clear filters" button and a "no matches" empty state.
+**Table filters.** Users: name search + email search + department + role. Documents: title search + owner department + classification + access department (client-side over the loaded list). Audit logs: actor search (debounced 300 ms) + action dropdown, filtered on the server (`/audit-logs?action=&actor=`) so pagination stays correct. Each filtered view has a "Clear filters" button and a "no matches" empty state. The "Clear filters" button is always rendered (`invisible` when no filter is set) so the filter area never changes size.
+
+**Pagination & stable tables.** Every admin table shows `PAGE_SIZE` (8) rows per page with the shared `components/ui/Pagination.js` footer: Users and Documents paginate client-side over the filtered list (any filter change resets to page 1), Audit logs paginate on the server. Tables use `table-fixed` with widths on the `<th>`s so columns never resize when filters change the rows, and the admin `<main>` uses the `scrollbar-stable` utility (`scrollbar-gutter: stable`) so content does not shift sideways when the scrollbar appears or disappears.
 
 **Document preview.** The eye icon beside a document title opens a modal that asks the backend for a short-lived link (`getDocumentViewUrl` → `GET /api/documents/{uuid}/view-url`) and shows the PDF in an `<iframe>`, with an open-in-new-tab link and a close (X) button; Escape and a backdrop click also close it. The frontend never reads storage credentials — the backend checks access and presigns the R2 (Cloudflare) URL.
 
 **Unfinished features.** No fake data. Flags in `src/config/features.js` mark what is planned; while a flag is `false` the UI shows `ComingSoonBadge` / `ComingSoonNotice` (`components/ui/ComingSoon.js`) and disables the control. Turn a flag on only when the backend exists.
 
-Shared UI pieces: `components/ui/{Badge,DepartmentBadge,IconButton,ComingSoon,ThemeSelect}.js`.
+Shared UI pieces: `components/ui/{Badge,DepartmentBadge,IconButton,Pagination,ComingSoon,ThemeSelect}.js`.
 
 ## 6. UI & accessibility standards
 

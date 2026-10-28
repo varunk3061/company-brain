@@ -538,6 +538,7 @@ export default function ChatApp() {
                   </div>
                 )}
 
+                {/* Documents You Can Access — hidden from employee view
                 <section className="mt-6 w-full rounded-card border border-line bg-surface text-left shadow-card">
                   <div className="flex items-center justify-between border-b border-line px-5 py-3">
                     <h3 className="text-sm font-semibold text-ink">
@@ -584,6 +585,7 @@ export default function ChatApp() {
                     </ul>
                   )}
                 </section>
+                */}
               </div>
             ) : (
               <div className="mx-auto max-w-5xl space-y-6">

@@ -238,3 +238,9 @@ input[type="submit"]:not(:disabled) {
 @utility anim-delay-2 {
   animation-delay: -0.15s;
 }
+
+/* Reserve the scrollbar's space even when it is hidden, so a page that gets shorter
+   (e.g. a filtered table) does not jump sideways when the scrollbar disappears. */
+@utility scrollbar-stable {
+  scrollbar-gutter: stable;
+}
