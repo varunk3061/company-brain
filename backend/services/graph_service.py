@@ -1,9 +1,16 @@
+import logging
+
 from database.neo4j_connection import (
     get_neo4j_driver,
     NEO4J_DATABASE,
 )
 
 from services.entity_service import extract_from_chunks
+
+logger = logging.getLogger(__name__)
+
+# Full-text index on entity keys, used to find entity names in a question.
+ENTITY_FULLTEXT_INDEX = "entity_key_fulltext"
 
 #------------------------------------------------------------------------------------------------------------------------------
 
@@ -134,6 +141,19 @@ def initialize_graph():
     with driver.session(database=NEO4J_DATABASE) as session:
         for query in queries:
             session.run(query).consume()
+
+    # Optional: retrieval falls back to scanning all entity keys without it,
+    # so a Neo4j edition/version that rejects it must not stop startup.
+    try:
+        with driver.session(database=NEO4J_DATABASE) as session:
+            session.run(
+                f"""
+                CREATE FULLTEXT INDEX {ENTITY_FULLTEXT_INDEX} IF NOT EXISTS
+                FOR (e:Entity) ON EACH [e.key]
+                """
+            ).consume()
+    except Exception as exc:
+        logger.warning("Could not create the entity full-text index: %s: %s", type(exc).__name__, exc)
 
 
 def get_access_fields(record):

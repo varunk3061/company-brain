@@ -8,6 +8,10 @@ os.environ.update({
     "ADMIN_NAME": "Root Admin",
     "ADMIN_EMAIL": "root@nexora.com",
     "ADMIN_PASSWORD": "correct-horse-battery",
+    # No cross-encoder download in tests; rerank tests switch it on with a fake scorer.
+    "RERANK_PROVIDER": "none",
+    # Never reach a real Neo4j from tests (load_dotenv does not override this); graph tests use fakes.
+    "NEO4J_PASSWORD": "",
 })
 
 import pytest

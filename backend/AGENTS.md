@@ -51,6 +51,10 @@ uvicorn main:app --reload --port 8000
 | `PRESIGNED_URL_TTL_SECONDS` | | Lifetime of "view PDF" links; default `300` (R2 max 7 days) |
 | `DOCUMENTS_ROOT` | legacy | Absolute path; only for the old server-side folder scan |
 | `GROQ_API_KEY`, `GROQ_MODEL` | ✅ for answers | Groq LLM used by `/api/rag/ask` (model defaults to `openai/gpt-oss-120b`) |
+| `NVIDIA_API_KEY`, `NVIDIA_MODEL`, `NVIDIA_BASE_URL` | | Fallback LLM when Groq fails; the key is also used by `RERANK_PROVIDER=nvidia` |
+| `RERANK_PROVIDER` | | `local` (default, MiniLM cross-encoder on CPU), `nvidia` (hosted, falls back to local) or `none` |
+| `RERANK_CANDIDATES`, `RERANK_TOP_N` | | Chunks scored by the reranker (default `50`) and sent to the LLM (default `6`) |
+| `RERANK_MIN_SCORE` | | Abstain when the best rerank score (0–1) is below this; default `0.02`. Tune with `python -m scripts.tune_rerank` |
 
 The app **fails fast** at import time if required values are missing or weak. Never commit `.env`; keep `.env.example` in sync whenever you add a variable.
 
@@ -150,7 +154,7 @@ Tokens carry the user id only. Role, clearance and permissions are re-read on **
 | POST | `/api/documents/scan-and-ingest` | `documents.manage` | Legacy: register PDFs in a server folder, then chunk + embed them |
 | POST | `/api/documents/{uuid}/ingest` | `documents.manage` | (Re)process one registered PDF; uploaded PDFs are re-read from R2 (no re-upload) |
 
-**How it fits together.** `services/rag_service.py` (ingest) → `documents_chunk` (text, `embedding`, `classification`, `department_code`, `access`) → `services/retrieval_service.py` (`$vectorSearch` with `build_document_filter(ctx)`) → `services/llm_service.py` (Groq, cites `[Source: file, Page: N]`). Changing a document's access updates its chunks; deleting a document deletes them.
+**How it fits together.** `services/rag_service.py` (ingest) → `documents_chunk` (text, `embedding`, `classification`, `department_code`, `access`) → `services/query_router.py` (entities named in the question, found via the Neo4j full-text index `entity_key_fulltext`, decide the route: `vector` · `vector+entity` · `vector+entity+facts` for relationship questions) → `services/retrieval_service.py` (`$vectorSearch` with `build_document_filter(ctx)`, plus Neo4j topic/entity candidates; graph facts are kept only if their evidence chunk passes the same filter) → `services/rerank_service.py` (cross-encoder scores up to 50 permitted chunks, keeps the top 6; abstains below `RERANK_MIN_SCORE`, rerank scores go to the audit log only) → `services/llm_service.py` (Groq, cites `[Source: file, Page: N]`). Changing a document's access updates its chunks; deleting a document deletes them.
 
 **One-time setup per Atlas cluster.** The vector index must be able to filter on the access fields:
 
@@ -313,7 +317,7 @@ Rules:
 | Area | Issue |
 |---|---|
 | Auth | No login rate-limiting, no token revocation list (blocking a user does take effect immediately), HS256 shared secret |
-| RAG | Baseline only: one retrieval method (dense), no rerank, hybrid search, router or graph; uses LangChain wrappers for the embedding model and Groq, which the brief asks to avoid in the baseline (log what they hide before keeping them) |
+| RAG | Dense + graph retrieval with a rule-based router and cross-encoder rerank; no sparse/BM25 hybrid search or multi-hop/aggregate graph queries yet; uses LangChain wrappers for the embedding model and Groq, which the brief asks to avoid in the baseline (log what they hide before keeping them) |
 | Documents | No versioning, approval workflow or validation pipeline yet; scanned (image-only) PDFs are stored but not indexed (no OCR); `needs_classification` docs are visible as `internal` until an admin classifies them; deleting a document does not yet remove its Neo4j nodes |
 | Audit | Only admin changes are logged (viewable via `/audit-logs`); no query audit yet |
 | Org | Roles/departments cannot be deleted (deactivate only); `documents.approve` is stored but not enforced yet |

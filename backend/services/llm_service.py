@@ -86,12 +86,15 @@ def _get_nvidia_llm():
         from langchain_openai import ChatOpenAI
 
         _nvidia_llm = ChatOpenAI(
-            model=NVIDIA_MODEL,
-            api_key=NVIDIA_API_KEY,
-            base_url=NVIDIA_BASE_URL,
-            temperature=0.2,
-            # model_kwargs={"top_p": 0.95},
-            top_p=0.95,
+        model=NVIDIA_MODEL,                  # nvidia/nemotron-3-super-120b-a12b
+        api_key=NVIDIA_API_KEY,
+        base_url=NVIDIA_BASE_URL,
+        temperature=0.2,
+        top_p=0.95,
+        max_tokens=2048,
+        timeout=60,
+        max_retries=1,
+        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
 
     return _nvidia_llm
@@ -131,11 +134,13 @@ Answer the question using the guidelines above.
         print("Answer generated successfully using NVIDIA fallback.")
         return response.content
 
+    # except Exception as nvidia_error:
+    #     print(
+    #         "NVIDIA fallback failed. "
+    #         f"Error type: {type(nvidia_error).__name__}"
+    #     )
     except Exception as nvidia_error:
-        print(
-            "NVIDIA fallback failed. "
-            f"Error type: {type(nvidia_error).__name__}"
-        )
+        print(f"NVIDIA fallback failed: {type(nvidia_error).__name__}: {nvidia_error}")
 
         raise HTTPException(
             status_code=502,

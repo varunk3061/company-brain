@@ -1,3 +1,4 @@
+import logging
 import re
 
 from collections import defaultdict
@@ -13,7 +14,12 @@ from services.access.policy import (
     UserContext,
     build_document_filter,
 )
+from services import rerank_service
 from services.embedding_service import get_embedding
+from services.graph_service import ENTITY_FULLTEXT_INDEX
+from services.query_router import RetrievalPlan, build_plan
+
+logger = logging.getLogger(__name__)
 
 
 # Must exactly match the Atlas Vector Search index name.
@@ -24,6 +30,13 @@ MAX_GRAPH_DOCUMENTS = 10
 
 # Maximum number of chunks found through entity matching.
 MAX_ENTITY_CHUNKS = 15
+
+# Entity candidates read from the full-text index before the whole-word check.
+MAX_ENTITY_CANDIDATES = 200
+
+# Graph relations read from Neo4j, and how many permitted ones reach the LLM.
+MAX_GRAPH_FACT_CANDIDATES = 100
+MAX_GRAPH_FACTS = 15
 
 
 def _vector_search(
@@ -119,6 +132,72 @@ def _normalize_text(text: str) -> str:
     return " " + re.sub(r"[^a-z0-9]+", " ", str(text).lower()).strip() + " "
 
 
+def _question_tokens(question: str) -> list:
+    """Distinct words of the question (letters/digits only), safe to put in a Lucene query."""
+    words = _normalize_text(question).split()
+    return list(dict.fromkeys(word for word in words if len(word) >= 2))[:64]
+
+
+def _detect_entity_keys(session, question: str) -> list:
+    """
+    Entity keys whose name appears in the question as whole words.
+
+    The full-text index narrows the candidates; without it (older graph, index
+    still building) every key is scanned as before. Keys shorter than 3
+    characters are skipped (too many false matches).
+    """
+
+    question_text = _normalize_text(question)
+    tokens = _question_tokens(question)
+
+    if not tokens:
+        return []
+
+    try:
+        records = list(session.run(
+            """
+            CALL db.index.fulltext.queryNodes($index, $search) YIELD node, score
+            RETURN node.key AS key
+            ORDER BY score DESC
+            LIMIT $limit
+            """,
+            index=ENTITY_FULLTEXT_INDEX,
+            search=" OR ".join(tokens),
+            limit=MAX_ENTITY_CANDIDATES,
+        ))
+    except Exception as exc:
+        logger.warning("Entity full-text index unavailable (%s); scanning all entity keys.", type(exc).__name__)
+        records = list(session.run("MATCH (e:Entity) RETURN e.key AS key"))
+
+    return list(dict.fromkeys(
+        record["key"]
+        for record in records
+        if record["key"]
+        and len(record["key"]) >= 3
+        and _normalize_text(record["key"]) in question_text
+    ))
+
+
+def _entity_chunk_uuids_for_keys(session, keys: list) -> list:
+    """Chunks mentioning these entities or their direct neighbours (IDs only)."""
+
+    records = session.run(
+        """
+        MATCH (e:Entity) WHERE e.key IN $keys
+        OPTIONAL MATCH (e)-[:RELATED_TO]-(n:Entity)
+        WITH collect(DISTINCT e) + collect(DISTINCT n) AS entities
+        UNWIND entities AS ent
+        MATCH (c:Chunk)-[:MENTIONS]->(ent)
+        RETURN DISTINCT c.chunk_uuid AS chunk_uuid
+        LIMIT $max_chunks
+        """,
+        keys=list(keys),
+        max_chunks=MAX_ENTITY_CHUNKS,
+    )
+
+    return [record["chunk_uuid"] for record in records if record["chunk_uuid"]]
+
+
 def _find_entity_chunk_uuids(question: str) -> list:
     """
     Ask Neo4j for chunks that mention entities named in the question,
@@ -129,38 +208,115 @@ def _find_entity_chunk_uuids(question: str) -> list:
     """
 
     driver = get_neo4j_driver()
-    question_text = _normalize_text(question)
 
     with driver.session(database=NEO4J_DATABASE) as session:
-        # 1. Entities whose name appears in the question as whole words.
-        #    Keys shorter than 3 characters are skipped (too many false matches).
-        keys = [
-            record["key"]
-            for record in session.run("MATCH (e:Entity) RETURN e.key AS key")
-            if record["key"]
-            and len(record["key"]) >= 3
-            and _normalize_text(record["key"]) in question_text
-        ]
+        keys = _detect_entity_keys(session, question)
 
         if not keys:
             return []
 
-        # 2. Chunks mentioning those entities or their direct neighbours.
+        return _entity_chunk_uuids_for_keys(session, keys)
+
+
+def plan_retrieval(question: str) -> RetrievalPlan:
+    """
+    Detect entities in the question and choose the retrieval paths.
+
+    Never raises: if Neo4j is unavailable the plan is vector-only.
+    """
+
+    try:
+        driver = get_neo4j_driver()
+        with driver.session(database=NEO4J_DATABASE) as session:
+            keys = _detect_entity_keys(session, question)
+    except Exception as exc:
+        logger.warning("Entity detection unavailable, using vector-only plan: %s: %s", type(exc).__name__, exc)
+        keys = []
+
+    return build_plan(question, keys)
+
+
+def _find_graph_facts(keys: list) -> list:
+    """Relations touching the question's entities, with their evidence chunk (no permission check yet)."""
+
+    driver = get_neo4j_driver()
+
+    with driver.session(database=NEO4J_DATABASE) as session:
         records = session.run(
             """
-            MATCH (e:Entity) WHERE e.key IN $keys
-            OPTIONAL MATCH (e)-[:RELATED_TO]-(n:Entity)
-            WITH collect(DISTINCT e) + collect(DISTINCT n) AS entities
-            UNWIND entities AS ent
-            MATCH (c:Chunk)-[:MENTIONS]->(ent)
-            RETURN DISTINCT c.chunk_uuid AS chunk_uuid
-            LIMIT $max_chunks
+            MATCH (a:Entity)-[r:RELATED_TO]->(b:Entity)
+            WHERE a.key IN $keys OR b.key IN $keys
+            RETURN a.name AS subject, r.type AS relation, b.name AS object,
+                   r.chunk_uuid AS chunk_uuid
+            LIMIT $limit
             """,
-            keys=keys,
-            max_chunks=MAX_ENTITY_CHUNKS,
+            keys=list(keys),
+            limit=MAX_GRAPH_FACT_CANDIDATES,
         )
+        return [dict(record) for record in records]
 
-        return [record["chunk_uuid"] for record in records if record["chunk_uuid"]]
+
+def retrieve_graph_facts(plan: RetrievalPlan, ctx: UserContext) -> list:
+    """
+    Graph relations for relationship questions, e.g. "Ravi Kumar MANAGES Project Atlas".
+
+    A fact is kept only if its evidence chunk passes the user's permission
+    filter in MongoDB, and it is cited with that chunk's document and page.
+    Never raises: facts are an enhancement on top of document retrieval.
+    """
+
+    if not plan.use_graph_facts:
+        return []
+
+    try:
+        candidates = [
+            fact for fact in _find_graph_facts(list(plan.entity_keys))
+            if fact.get("chunk_uuid") and fact.get("subject") and fact.get("object") and fact.get("relation")
+        ]
+
+        if not candidates:
+            return []
+
+        evidence = {
+            chunk["chunk_uuid"]: chunk
+            for chunk in documents_chunk_collection.find(
+                {
+                    "$and": [
+                        build_document_filter(ctx),
+                        {"chunk_uuid": {"$in": list({f["chunk_uuid"] for f in candidates})}},
+                    ]
+                },
+                {"_id": 0, "chunk_uuid": 1, "document_uuid": 1, "source": 1, "page": 1},
+            )
+        }
+
+    except Exception as exc:
+        logger.warning("Graph facts unavailable: %s: %s", type(exc).__name__, exc)
+        return []
+
+    facts = {}
+
+    for fact in candidates:
+        chunk = evidence.get(fact["chunk_uuid"])
+        key = (fact["subject"], fact["relation"], fact["object"])
+
+        if chunk is None or key in facts:
+            continue
+
+        facts[key] = {
+            "subject": fact["subject"],
+            "relation": fact["relation"],
+            "object": fact["object"],
+            "chunk_uuid": chunk["chunk_uuid"],
+            "document_uuid": chunk.get("document_uuid"),
+            "source": chunk.get("source", "Unknown document"),
+            "page": chunk.get("page"),
+        }
+
+        if len(facts) >= MAX_GRAPH_FACTS:
+            break
+
+    return list(facts.values())
 
 
 def _load_entity_chunks(chunk_uuids: list, ctx: UserContext, question_embedding: list) -> list:
@@ -205,10 +361,12 @@ def _select_chunks(
     candidates: list,
     limit: int,
     max_per_document: int,
+    score_key: str = "score",
 ) -> list:
     """
-    Remove duplicate chunks, prioritize higher vector scores,
-    and limit how many chunks come from each document.
+    Remove duplicate chunks, prioritize higher scores (vector `score`
+    by default, `rerank_score` after reranking), and limit how many
+    chunks come from each document.
     """
 
     unique_chunks = {}
@@ -226,7 +384,7 @@ def _select_chunks(
 
     ranked_chunks = sorted(
         unique_chunks.values(),
-        key=lambda chunk: chunk.get("score", 0),
+        key=lambda chunk: chunk.get(score_key, 0),
         reverse=True,
     )
 
@@ -253,14 +411,26 @@ def retrieve_relevant_chunks(
     ctx: UserContext,
     limit: int = 10,
     max_per_document: int = 4,
+    plan: RetrievalPlan | None = None,
 ) -> list:
     """
     Retrieve accessible chunks using MongoDB vector search
-    and Neo4j shared-topic relationships.
+    and Neo4j shared-topic and entity relationships.
+
+    `plan` (from plan_retrieval) says whether the entity graph is needed; without
+    one, entities are detected here. The entity graph runs even when vector
+    search finds nothing, so a question naming a known entity can still be answered.
 
     MongoDB remains responsible for permission-filtered content.
     Neo4j only helps discover potentially related documents.
+
+    With reranking on, a wider pool (RERANK_CANDIDATES) is scored by a
+    cross-encoder and at most RERANK_TOP_N chunks are returned, each
+    carrying `rerank_score`. If reranking is off or fails, the original
+    vector-score selection (`limit` chunks) is used unchanged.
     """
+
+    reranking_enabled = rerank_service.RERANK_PROVIDER != "none"
 
     try:
         question_embedding = get_embedding().embed_query(question)
@@ -269,13 +439,11 @@ def retrieve_relevant_chunks(
         initial_chunks = _vector_search(
             question_embedding=question_embedding,
             ctx=ctx,
-            candidate_limit=30,
+            candidate_limit=rerank_service.RERANK_CANDIDATES if reranking_enabled else 30,
         )
 
-        if not initial_chunks:
-            return []
-
-        # 2. Discover documents connected through shared topics.
+        # 2. Discover documents connected through shared topics
+        # (needs vector results as seeds).
         seed_document_uuids = list({
             chunk["document_uuid"]
             for chunk in initial_chunks
@@ -285,6 +453,8 @@ def retrieve_relevant_chunks(
         try:
             related_document_uuids = (
                 _find_related_document_uuids(seed_document_uuids)
+                if seed_document_uuids
+                else []
             )
 
             # 3. Search related documents in MongoDB.
@@ -310,7 +480,14 @@ def retrieve_relevant_chunks(
         # 3b. Entity graph: chunks mentioning entities named in the question.
         # Neo4j gives chunk IDs only; MongoDB applies the permission filter.
         try:
-            entity_chunk_uuids = _find_entity_chunk_uuids(question)
+            if plan is None:
+                entity_chunk_uuids = _find_entity_chunk_uuids(question)
+            elif plan.use_entity_graph:
+                with get_neo4j_driver().session(database=NEO4J_DATABASE) as session:
+                    entity_chunk_uuids = _entity_chunk_uuids_for_keys(session, plan.entity_keys)
+            else:
+                entity_chunk_uuids = []
+
             entity_chunks = _load_entity_chunks(entity_chunk_uuids, ctx, question_embedding)
 
         except Exception as entity_exc:
@@ -325,6 +502,28 @@ def retrieve_relevant_chunks(
         # Duplicate chunks are removed and higher scores are prioritized.
         all_candidates = initial_chunks + graph_chunks + entity_chunks
 
+        if not all_candidates:
+            return []
+
+        # 5. Rerank: score the best RERANK_CANDIDATES (deduplicated) with a
+        # cross-encoder and keep the top RERANK_TOP_N for the LLM.
+        if reranking_enabled:
+            pool = _select_chunks(
+                candidates=all_candidates,
+                limit=rerank_service.RERANK_CANDIDATES,
+                max_per_document=rerank_service.RERANK_CANDIDATES,
+            )
+            reranked = rerank_service.rerank(question, pool)
+
+            if reranked is not None:
+                return _select_chunks(
+                    candidates=reranked,
+                    limit=min(limit, rerank_service.RERANK_TOP_N),
+                    max_per_document=max_per_document,
+                    score_key="rerank_score",
+                )
+
+        # Reranking off or unavailable: original vector-score selection.
         return _select_chunks(
             candidates=all_candidates,
             limit=limit,
