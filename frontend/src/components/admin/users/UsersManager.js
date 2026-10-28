@@ -3,13 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDownIcon, SearchIcon, UserPlusIcon } from "../icons";
 import UserModal from "./UserModal";
-import { DEPARTMENTS } from "./data";
-import {
-  createEmployee,
-  getEmployees,
-  updateEmployee,
-  deleteEmployee,
-} from "../../../services/employeeService";
+import Badge from "@/components/ui/Badge";
+import DepartmentBadge from "@/components/ui/DepartmentBadge";
+import { displayName } from "@/lib/format";
+import { createUser, getUsers, updateUser, deleteUser } from "@/services/userService";
+import { getDepartments, getRoles } from "@/services/orgService";
 
 const initialsOf = (name = "") =>
   name
@@ -19,51 +17,28 @@ const initialsOf = (name = "") =>
     .map((word) => word[0].toUpperCase())
     .join("");
 
-const DEPT_TONES = {
-  Engineering: "bg-sky-50 text-sky-600",
-  IT: "bg-sky-50 text-sky-600",
-  HR: "bg-violet-50 text-violet-600",
-  Security: "bg-emerald-50 text-emerald-600",
-  Finance: "bg-amber-50 text-amber-700",
-  Support: "bg-slate-100 text-slate-600",
-  Operations: "bg-slate-100 text-slate-600",
-};
-
-const AVATAR_TONES = {
-  Engineering: "bg-indigo-100 text-indigo-700",
-  IT: "bg-indigo-100 text-indigo-700",
-  HR: "bg-purple-100 text-purple-700",
-  Security: "bg-emerald-100 text-emerald-700",
-  Finance: "bg-amber-100 text-amber-700",
-  Support: "bg-slate-200 text-slate-700",
-  Operations: "bg-slate-200 text-slate-700",
-};
-
-const STATUS_TONES = {
-  Active: "bg-emerald-50 text-emerald-700",
-  Revoked: "bg-red-50 text-red-600",
-};
-
 const COLUMNS = [
-  "Employee Name",
+  "Name",
   "Email",
   "Department",
-  "Access Role",
+  "Role",
   "Status",
   "Actions",
 ];
 
 const linkBtn =
-  "rounded text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500";
+  "rounded text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
-function normalizeEmployee(employee) {
+function normalizeUser(user) {
   return {
-    id: employee.employee_uuid,
-    name: employee.name,
-    email: employee.email,
-    department: employee.department,
-    role: employee.role,
-    status: employee.status === "active" ? "Active" : "Revoked",
+    id: user.user_uuid,
+    name: displayName(user.name),
+    email: user.email,
+    departmentCode: user.department_code,
+    departmentName: user.department_name,
+    roleCode: user.role_code,
+    roleName: user.role_name,
+    status: user.status === "active" ? "Active" : "Revoked",
   };
 }
 
@@ -71,6 +46,8 @@ export default function UsersManager() {
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState("");
   const [dept, setDept] = useState("All Departments");
+  const [departments, setDepartments] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -82,10 +59,16 @@ export default function UsersManager() {
     setPageError("");
 
     try {
-      const result = await getEmployees();
-      setUsers(result.items.map(normalizeEmployee));
+      const [result, departmentList, roleList] = await Promise.all([
+        getUsers(),
+        getDepartments(),
+        getRoles(),
+      ]);
+      setUsers(result.items.map(normalizeUser));
+      setDepartments(departmentList.filter((d) => d.status === "active"));
+      setRoles(roleList.filter((r) => r.status === "active"));
     } catch (error) {
-      setPageError(error.message || "Unable to load employees.");
+      setPageError(error.message || "Unable to load users.");
     } finally {
       setLoading(false);
     }
@@ -100,7 +83,7 @@ export default function UsersManager() {
 
     return users.filter((user) => {
       const matchesDept =
-        dept === "All Departments" || user.department === dept;
+        dept === "All Departments" || user.departmentCode === dept;
 
       const matchesQuery =
         !q ||
@@ -121,13 +104,13 @@ export default function UsersManager() {
     setSaving(true);
     try {
       if (editingUser) {
-        await updateEmployee(editingUser.id, {
-          department: values.department,
-          role: values.role,
-          status: editingUser.status === "Active" ? "active" : "blocked",
+        await updateUser(editingUser.id, {
+          name: values.name,
+          department_code: values.department_code,
+          role_code: values.role_code,
         });
       } else {
-        await createEmployee(values);
+        await createUser(values);
       }
 
       await loadEmployees();
@@ -140,14 +123,10 @@ export default function UsersManager() {
   const toggleAccess = async (user) => {
     try {
       const nextStatus = user.status === "Active" ? "blocked" : "active";
-      await updateEmployee(user.id, {
-        department: user.department,
-        role: user.role,
-        status: nextStatus,
-      });
+      await updateUser(user.id, { status: nextStatus });
       await loadEmployees();
     } catch (error) {
-      setPageError(error.message || "Unable to update employee status.");
+      setPageError(error.message || "Unable to update user status.");
     }
   };
 
@@ -160,7 +139,7 @@ export default function UsersManager() {
     setPageError("");
 
     try {
-      await deleteEmployee(user.id);
+      await deleteUser(user.id);
 
       setUsers((previousUsers) =>
         previousUsers.filter((item) => item.id !== user.id),
@@ -168,7 +147,7 @@ export default function UsersManager() {
 
       setDeleteTarget(null);
     } catch (error) {
-      setPageError(error.message || "Unable to delete employee.");
+      setPageError(error.message || "Unable to delete user.");
     } finally {
       setDeletingId(null);
     }
@@ -178,29 +157,29 @@ export default function UsersManager() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            User &amp; Employee Management
+          <h1 className="text-2xl font-bold tracking-tight text-ink">
+            User Management
           </h1>
 
-          <p className="mt-1 text-sm text-slate-500">
-            Manage employee accounts, department permissions, and access roles.
+          <p className="mt-1 text-sm text-ink-3">
+            Manage user accounts and assign each person a department and role.
           </p>
         </div>
 
         <button
           type="button"
           onClick={() => setModal({ user: null })}
-          className="flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 cursor-pointer"
+          className="flex shrink-0 items-center gap-2 rounded-control bg-brand px-5 py-3 text-sm font-semibold text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/25"
         >
-          <UserPlusIcon className="h-4 w-4 cursor-pointer" />
-          Add New Employee
+          <UserPlusIcon className="h-4 w-4" />
+          Add New User
         </button>
       </div>
 
       {pageError && (
         <div
           role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-control border border-danger/30 bg-danger-soft p-4 text-sm text-danger"
         >
           <span>{pageError}</span>
 
@@ -214,10 +193,10 @@ export default function UsersManager() {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
         <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:max-w-sm">
-            <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
 
             <input
               type="search"
@@ -225,7 +204,7 @@ export default function UsersManager() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search users by name or email..."
               aria-label="Search users"
-              className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+              className="block w-full rounded-control border border-line bg-surface-2 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-ink-3 focus:border-brand focus:bg-surface focus:ring-4 focus:ring-brand/25"
             />
           </div>
 
@@ -234,30 +213,30 @@ export default function UsersManager() {
               value={dept}
               onChange={(event) => setDept(event.target.value)}
               aria-label="Filter by department"
-              className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-4 pr-10 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100 sm:w-auto cursor-pointer"
+              className="w-full appearance-none rounded-control border border-line bg-surface-2 py-2.5 pl-4 pr-10 text-sm text-ink-2 outline-none transition focus:border-brand focus:bg-surface focus:ring-4 focus:ring-brand/25 sm:w-auto"
             >
               <option value="All Departments">All Departments</option>
 
-              {DEPARTMENTS.map((department) => (
-                <option key={department} value={department}>
-                  {department}
+              {departments.map((department) => (
+                <option key={department.code} value={department.code}>
+                  {department.name}
                 </option>
               ))}
             </select>
 
-            <ChevronDownIcon className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 " />
+            <ChevronDownIcon className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3 " />
           </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-225 text-left">
             <thead>
-              <tr className="border-y border-slate-200 bg-slate-50">
+              <tr className="border-y border-line bg-surface-2">
                 {COLUMNS.map((column) => (
                   <th
                     key={column}
                     scope="col"
-                    className={`px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 cursor-pointer ${
+                    className={`px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-ink-3 ${
                       column === "Actions" ? "text-right" : ""
                     }`}
                   >
@@ -267,14 +246,14 @@ export default function UsersManager() {
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {loading && (
                 <tr>
                   <td
                     colSpan={COLUMNS.length}
-                    className="px-6 py-10 text-center text-sm text-slate-500"
+                    className="px-6 py-10 text-center text-sm text-ink-3"
                   >
-                    Loading employees...
+                    Loading users...
                   </td>
                 </tr>
               )}
@@ -283,9 +262,9 @@ export default function UsersManager() {
                 <tr>
                   <td
                     colSpan={COLUMNS.length}
-                    className="px-6 py-10 text-center text-sm text-slate-400"
+                    className="px-6 py-10 text-center text-sm text-ink-3"
                   >
-                    No employees match your search.
+                    No users match your search.
                   </td>
                 </tr>
               )}
@@ -297,22 +276,19 @@ export default function UsersManager() {
                   return (
                     <tr
                       key={user.id}
-                      className="transition hover:bg-slate-50/60"
+                      className="transition hover:bg-surface-2/60"
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <span
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-                              AVATAR_TONES[user.department] ??
-                              AVATAR_TONES.Operations
-                            }`}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-tint text-micro font-bold text-brand-text"
                           >
                             {initialsOf(user.name)}
                           </span>
 
                           <span
                             className={`text-sm font-semibold ${
-                              revoked ? "text-slate-400" : "text-slate-900"
+                              revoked ? "text-ink-3" : "text-ink"
                             }`}
                           >
                             {user.name}
@@ -320,32 +296,20 @@ export default function UsersManager() {
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 text-sm text-slate-500">
+                      <td className="px-6 py-4 text-sm text-ink-3">
                         {user.email}
                       </td>
 
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                            DEPT_TONES[user.department] ?? DEPT_TONES.Operations
-                          }`}
-                        >
-                          {user.department}
-                        </span>
+                        <DepartmentBadge code={user.departmentCode}>{user.departmentName}</DepartmentBadge>
                       </td>
 
-                      <td className="px-6 py-4 text-sm font-semibold text-slate-800">
-                        {user.role}
+                      <td className="px-6 py-4 text-sm font-semibold text-ink">
+                        {user.roleName}
                       </td>
 
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                            STATUS_TONES[user.status] ?? STATUS_TONES.Revoked
-                          }`}
-                        >
-                          {user.status}
-                        </span>
+                        <Badge tone={revoked ? "danger" : "success"}>{user.status}</Badge>
                       </td>
 
                       <td className="px-6 py-4">
@@ -354,7 +318,7 @@ export default function UsersManager() {
                           <button
                             type="button"
                             onClick={() => setModal({ user })}
-                            className={`${linkBtn} text-indigo-600 hover:text-indigo-700 cursor-pointer`}
+                            className={`${linkBtn} text-brand-text hover:text-brand-text`}
                           >
                             Edit
                           </button>
@@ -365,9 +329,9 @@ export default function UsersManager() {
                             onClick={() => toggleAccess(user)}
                             className={`${linkBtn} ${
                               revoked
-                                ? "text-emerald-600 hover:text-emerald-700"
-                                : "text-red-500 hover:text-red-600"
-                            } cursor-pointer`}
+                                ? "text-success hover:text-success"
+                                : "text-danger hover:text-danger"
+                            }`}
                           >
                             {revoked ? "Restore" : "Revoke"}
                           </button>
@@ -377,7 +341,7 @@ export default function UsersManager() {
                             type="button"
                             onClick={() => setDeleteTarget(user)}
                             disabled={deletingId === user.id}
-                            className={`${linkBtn} text-red-700 hover:text-red-900 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer`}
+                            className={`${linkBtn} text-danger hover:text-danger disabled:opacity-50`}
                           >
                             {deletingId === user.id ? "Deleting..." : "Delete"}
                           </button>
@@ -394,6 +358,8 @@ export default function UsersManager() {
       {modal && (
         <UserModal
           initial={editingUser}
+          departments={departments}
+          roles={roles}
           takenEmails={takenEmails}
           onSave={handleSave}
           onClose={() => setModal(null)}
@@ -402,7 +368,7 @@ export default function UsersManager() {
 
       {deleteTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4 backdrop-blur-sm"
           onClick={() => {
             if (deletingId === null) setDeleteTarget(null);
           }}
@@ -411,19 +377,19 @@ export default function UsersManager() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-modal-title"
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl cursor-default"
+            className="w-full max-w-md rounded-card border border-line bg-surface p-6 shadow-pop cursor-default"
             onClick={(event) => event.stopPropagation()}
           >
             {/* Warning icon and heading */}
             <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-danger-soft">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"
-                  className="h-6 w-6 text-red-600"
+                  className="h-6 w-6 text-danger"
                   aria-hidden="true"
                 >
                   <path
@@ -437,35 +403,35 @@ export default function UsersManager() {
               <div className="min-w-0 flex-1">
                 <h2
                   id="delete-modal-title"
-                  className="text-lg font-bold text-slate-900"
+                  className="text-lg font-bold text-ink"
                 >
-                  Delete Employee
+                  Delete User
                 </h2>
 
-                <p className="mt-2 text-sm leading-6 text-slate-600">
+                <p className="mt-2 text-sm leading-6 text-ink-2">
                   Are you sure you want to permanently delete{" "}
-                  <span className="font-semibold text-slate-900">
+                  <span className="font-semibold text-ink">
                     {deleteTarget.name}
                   </span>
                   ?
                 </p>
 
-                <p className="mt-2 text-sm text-red-600">
+                <p className="mt-2 text-sm text-danger">
                   This action cannot be undone.
                 </p>
               </div>
             </div>
 
             {/* Employee details */}
-            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="truncate text-sm font-semibold text-slate-800">
+            <div className="mt-5 rounded-control border border-line bg-surface-2 p-4">
+              <p className="truncate text-sm font-semibold text-ink">
                 {deleteTarget.name}
               </p>
-              <p className="mt-1 truncate text-sm text-slate-500">
+              <p className="mt-1 truncate text-sm text-ink-3">
                 {deleteTarget.email}
               </p>
-              <p className="mt-2 text-xs text-slate-500">
-                {deleteTarget.department} · {deleteTarget.role}
+              <p className="mt-2 text-xs text-ink-3">
+                {deleteTarget.departmentName} · {deleteTarget.roleName}
               </p>
             </div>
 
@@ -475,7 +441,7 @@ export default function UsersManager() {
                 type="button"
                 disabled={deletingId !== null}
                 onClick={() => setDeleteTarget(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                className="rounded-control border border-line px-4 py-2.5 text-sm font-semibold text-ink-2 transition hover:bg-surface-2 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -484,11 +450,11 @@ export default function UsersManager() {
                 type="button"
                 disabled={deletingId !== null}
                 onClick={handleDelete}
-                className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                className="rounded-control bg-danger px-4 py-2.5 text-sm font-semibold text-on-danger shadow-card transition hover:bg-danger-hover disabled:opacity-60"
               >
                 {deletingId === deleteTarget.id
                   ? "Deleting..."
-                  : "Delete Employee"}
+                  : "Delete User"}
               </button>
             </div>
           </div>

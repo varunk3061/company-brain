@@ -1,61 +1,55 @@
 import os
 import uuid
 
-from fastapi import FastAPI
-
-from datetime import datetime, timezone
 from contextlib import asynccontextmanager
-from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+load_dotenv()
 
 from database.connection import (
-    check_database_connection,
     admins_collection,
+    check_database_connection,
+    users_collection,
 )
 
-from routes.admin_routes import router as admin_router
-from routes.employee_routes import router as employee_router
-from routes.document_routes import router as document_router
+from database.neo4j_connection import (
+    verify_neo4j_connection,
+    close_neo4j_connection,
+)
+from services.graph_service import initialize_graph
 
+from routes.audit_routes import router as audit_router
+from routes.auth_routes import router as auth_router
+from routes.dashboard_routes import router as dashboard_router
+from routes.document_routes import router as document_router
+from routes.org_routes import router as org_router
+from routes.rag_routes import router as rag_router
+from routes.user_routes import router as user_router
+from routes.chat_routes import router as chat_router
+
+from services.org_seed import seed_org
 from utils.security import hash_password
 
 #------------------------------------------------------------------------------------------------
 
-load_dotenv()
-
-#------------------------------------------------------------------------------------------------
-app = FastAPI(
-    title="Admin and Employee Management API",
-    version="1.0.0",
-)
-#------------------------------------------------------------------------------------------------
-
-app.include_router(admin_router)
-app.include_router(employee_router)
-app.include_router(document_router)
+ADMIN_ROLE = "SYSTEM_ADMIN"
+ADMIN_DEPARTMENT = "EXEC"
 
 #------------------------------------------------------------------------------------------------
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000"
-        ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-#------------------------------------------------------------------------------------------------
 def create_initial_admin():
-    """Create the first admin if no admin account exists."""
+    """Create the first System Administrator on a brand-new install."""
 
-    # Never create another initial admin if one already exists.
+    if users_collection.count_documents({"role_code": ADMIN_ROLE}) > 0:
+        return
+
     if admins_collection.count_documents({}) > 0:
-        print("An admin account already exists.")
+        # Existing install that has not been migrated: don't create a second admin identity.
+        print("Legacy admins found. Run `python -m scripts.migrate_users --apply` to move them to `users`.")
         return
 
     admin_name = os.getenv("ADMIN_NAME")
@@ -68,32 +62,25 @@ def create_initial_admin():
             "in .env before starting the application."
         )
 
-    admin_email = admin_email.strip().lower()
-
-    if len(admin_password) < 6 :
-        raise RuntimeError(
-            "ADMIN_PASSWORD must contain at least 12 characters."
-        )
+    if len(admin_password) < 12:
+        raise RuntimeError("ADMIN_PASSWORD must contain at least 12 characters.")
 
     if len(admin_password.encode("utf-8")) > 72:
-        raise RuntimeError(
-            "ADMIN_PASSWORD must not exceed 72 UTF-8 bytes."
-        )
+        raise RuntimeError("ADMIN_PASSWORD must not exceed 72 UTF-8 bytes.")
 
     now = datetime.now(timezone.utc)
 
-    admin_document = {
-        "admin_uuid": str(uuid.uuid4()),
+    users_collection.insert_one({
+        "user_uuid": str(uuid.uuid4()),
         "name": admin_name.strip(),
-        "email": admin_email,
+        "email": admin_email.strip().lower(),
         "password_hash": hash_password(admin_password),
-        "role": "admin",
+        "department_code": ADMIN_DEPARTMENT,
+        "role_code": ADMIN_ROLE,
+        "status": "active",
         "created_at": now,
         "updated_at": now,
-    }
-
-    # Only the password hash is stored.
-    admins_collection.insert_one(admin_document)
+    })
 
     print("Initial admin created successfully.")
 
@@ -102,18 +89,55 @@ def create_initial_admin():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     check_database_connection()
+    seed_org()
     create_initial_admin()
 
-    yield
+    try:
+        verify_neo4j_connection()
+        initialize_graph()
+        print("Neo4j connected and graph constraints initialized.")
+    except Exception as error:
+        print(f"Neo4j initialization failed: {error}")
+        raise
 
+    try:
+        yield
+    finally:
+        close_neo4j_connection()
 
+#------------------------------------------------------------------------------------------------
 
+app = FastAPI(
+    title="Company Brain API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
+app.include_router(auth_router)
+app.include_router(audit_router)
+app.include_router(org_router)
+app.include_router(user_router)
+app.include_router(dashboard_router)
+app.include_router(document_router)
+app.include_router(rag_router)
+app.include_router(chat_router)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+        ).split(",")
+        if origin.strip()
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+#------------------------------------------------------------------------------------------------
 
 @app.get("/")
 def home():
-    return {
-        "message": "Admin and Employee Management API is running"
-    }
+    return {"message": "Company Brain API is running"}

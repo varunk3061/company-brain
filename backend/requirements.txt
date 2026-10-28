@@ -3,6 +3,15 @@ uvicorn[standard]
 pymongo
 pydantic[email]
 python-dotenv
-passlib[bcrypt]==1.7.4
+bcrypt>=4.1
 python-jose[cryptography]
 python-multipart
+langchain-groq
+langchain-community
+langchain-text-splitters
+langchain-huggingface
+sentence-transformers
+pypdf
+neo4j
+boto3
+langchain-openai

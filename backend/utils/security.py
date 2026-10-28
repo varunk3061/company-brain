@@ -1,9 +1,7 @@
 import os
 
-from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
-from jose import jwt, JWTError
-from passlib.context import CryptContext
+import bcrypt
 
 #-------------------------------------------------------------------------------------------------
 
@@ -38,42 +36,19 @@ if len(SECRET_KEY) < 32:
 if ACCESS_TOKEN_EXPIRE_MINUTES <= 0:
     raise ValueError("Token expiration must be greater than zero")
 
-# Password hashing configuration
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
-)
+#-------------------------------------------------------------------------------------------------
+
+def hash_password(password: str) -> str:
+    """Convert a plain password into a bcrypt hash (max 72 UTF-8 bytes)."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 #-------------------------------------------------------------------------------------------------
 
-def hash_password(password:str):
-    """Covert a plain password into a secure hash"""
-    return pwd_context.hash(password)
-
-#-------------------------------------------------------------------------------------------------
-
-def verify_password( plain_password: str, hashed_password: str ):
-    """Check whether a password matches its stored hash"""
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Check whether a password matches its stored hash."""
     try:
-        return pwd_context.verify(
-            plain_password, hashed_password
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
         )
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, AttributeError):
         return False
-
-#-------------------------------------------------------------------------------------------------
-
-def create_access_token(data):
-    to_encode = data.copy()
-
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-
-    to_encode.update({"exp": expire})
-
-    return jwt.encode(
-        to_encode,
-        SECRET_KEY,
-        algorithm=ALGORITHM
-    )

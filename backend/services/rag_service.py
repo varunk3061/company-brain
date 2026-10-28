@@ -1,0 +1,361 @@
+import os
+import hashlib
+import logging
+import traceback
+
+
+from typing import Union
+from uuid import uuid4
+from datetime import datetime, timezone
+from pathlib import Path
+
+from dotenv import load_dotenv
+from fastapi import HTTPException
+
+from database.connection import (
+    documents_collection,
+    documents_chunk_collection,
+)
+from services import storage_service
+from services.embedding_service import get_embedding
+from services.graph_service import sync_document_to_graph
+from services.pdf_service import read_pdf, sha256_hex
+
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+# Only used for documents registered by the legacy folder scan (they have `file_path`, not `object_key`).
+DOCUMENTS_ROOT = os.getenv("DOCUMENTS_ROOT")
+
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 150
+
+#-------------------------------------------------------------------------------------------------------------
+
+def chunk_access_fields(document: dict) -> dict:
+    """Copy document access permissions to each chunk.
+
+    `classification` and `department_code` are required by the vector-search permission filter
+    (services/access/policy.py): without them a chunk is only visible through explicit grants.
+    """
+    access = document.get("access") or {}
+
+    return {
+        "classification": document.get("classification", "restricted"),
+        "department_code": document.get("department_code"),
+        "access": access,
+        "allowed_roles": access.get("roles", []),
+        "allowed_departments": access.get("departments", []),
+        "allowed_users": access.get("users", []),
+    }
+
+#-------------------------------------------------------------------------------------------------------------
+
+def calculate_file_hash(file_path: str) -> str:
+    """Calculate a SHA-256 hash to detect file changes."""
+    sha256 = hashlib.sha256()
+
+    with open(file_path, "rb") as file:
+        for block in iter(lambda: file.read(8192), b""):
+            sha256.update(block)
+
+    return sha256.hexdigest()
+
+#-------------------------------------------------------------------------------------------------------------
+
+def validate_document_path(file_path: str) -> Path:
+    """Validate that the document exists and is a PDF."""
+    path = Path(file_path).expanduser().resolve()
+
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Document file not found: {path}",
+        )
+
+    if not path.is_file():
+        raise HTTPException(
+            status_code=400,
+            detail="The provided path is not a file.",
+        )
+
+    if path.suffix.lower() != ".pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF documents are supported.",
+        )
+
+    return path
+
+#-------------------------------------------------------------------------------------------------------------
+
+def load_document_bytes(document: dict) -> tuple:
+    """Return (pdf_bytes, file_name) for a document.
+
+    Uploaded documents are read from the private R2 bucket (`object_key`), so re-ingesting never needs
+    a re-upload. Documents registered by the legacy folder scan are still read from `file_path`.
+    """
+
+    object_key = document.get("object_key")
+
+    if object_key:
+        return storage_service.get_pdf_bytes(object_key), document.get("document_name") or "document.pdf"
+
+    file_path = document.get("file_path")
+
+    if file_path:
+        path = validate_document_path(file_path)
+        return path.read_bytes(), path.name
+
+    raise HTTPException(
+        status_code=400,
+        detail="This document has no stored file. Upload it again.",
+    )
+
+#-------------------------------------------------------------------------------------------------------------
+
+def sync_document_graph(document: dict, chunks: list) -> dict:
+    """Synchronize a document and its chunks with Neo4j."""
+    try:
+        sync_document_to_graph(document, chunks)
+
+        documents_collection.update_one(
+            {"document_uuid": document["document_uuid"]},
+            {
+                "$set": {
+                    "graph_sync_status": "indexed",
+                    "graph_sync_error": None,
+                }
+            },
+        )
+
+        return {
+            "graph_sync_status": "indexed",
+        }
+
+    except Exception as exc:
+        traceback.print_exc()
+
+        documents_collection.update_one(
+            {"document_uuid": document["document_uuid"]},
+            {
+                "$set": {
+                    "graph_sync_status": "failed",
+                    "graph_sync_error": str(exc),
+                }
+            },
+        )
+
+        return {
+            "graph_sync_status": "failed",
+            "graph_sync_error": str(exc),
+        }
+
+#-------------------------------------------------------------------------------------------------------------
+
+def _mark_failed(document_uuid: str, reason: str) -> None:
+    documents_collection.update_one(
+        {"document_uuid": document_uuid},
+        {
+            "$set": {
+                "status": "failed",
+                "ingestion_error": str(reason)[:500],
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
+    )
+
+#-------------------------------------------------------------------------------------------------------------
+
+def ingest_document(document: Union[dict, str]):
+    """
+    Process a PDF document:
+    1. Load its bytes (R2 for uploaded documents, local disk for legacy folder-scan documents).
+    2. Check whether the content has changed.
+    3. Split its text into chunks.
+    4. Generate embeddings and save chunks in MongoDB.
+    5. Synchronize the document and chunks with Neo4j.
+    """
+
+    if isinstance(document, str):
+        found = documents_collection.find_one({"document_uuid": document})
+        if not found:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Document '{document}' was not found in the database.",
+            )
+        document = dict(found)
+
+    document_uuid = document.get("document_uuid")
+
+    if not document_uuid:
+        raise HTTPException(
+            status_code=400,
+            detail="document_uuid is required.",
+        )
+
+    # The stored record is the source of truth for access fields and the storage location.
+    existing_document = documents_collection.find_one(
+        {"document_uuid": document_uuid}
+    )
+
+    if existing_document:
+        document = {**document, **existing_document}
+
+    data, file_name = load_document_bytes(document)
+    file_hash = sha256_hex(data)
+    document["file_hash"] = file_hash
+
+    # Even if the file is unchanged, synchronize its existing MongoDB chunks to Neo4j.
+    if (
+        existing_document
+        and existing_document.get("file_hash") == file_hash
+        and existing_document.get("status") == "completed"
+    ):
+        existing_chunks = list(
+            documents_chunk_collection.find(
+                {"document_uuid": document_uuid}
+            )
+        )
+
+        graph_result = sync_document_graph(
+            existing_document,
+            existing_chunks,
+        )
+
+        return {
+            "message": "Document is already up to date.",
+            "document_uuid": document_uuid,
+            "chunk_count": len(existing_chunks),
+            **graph_result,
+        }
+
+    try:
+        # Imported here so the API starts without the text-splitter package loaded.
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+        content = read_pdf(data, extract_text=True)
+
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP,
+            length_function=len,
+        )
+
+        # Page numbers are 1-based, as shown to users in citations.
+        split_chunks = splitter.create_documents(
+            content.pages,
+            metadatas=[{"page": index + 1} for index in range(len(content.pages))],
+        )
+
+        pieces = [
+            (chunk.page_content.strip(), chunk.metadata.get("page"))
+            for chunk in split_chunks
+            if chunk.page_content.strip()
+        ]
+
+        if not pieces:
+            raise HTTPException(
+                status_code=422,
+                detail="No readable text found in the PDF. Scanned (image-only) PDFs are not supported yet.",
+            )
+
+        # One batched call is much faster than embedding chunk by chunk.
+        vectors = get_embedding().embed_documents([text for text, _ in pieces])
+
+        access_fields = chunk_access_fields(document)
+        created_at = datetime.now(timezone.utc)
+        source_name = document.get("document_name") or file_name
+
+        chunk_records = [
+            {
+                "chunk_uuid": str(uuid4()),
+                "document_uuid": document_uuid,
+                "text": text,
+                "source": source_name,
+                "page": page,
+                "file_hash": file_hash,
+                "embedding": vector,
+                "created_at": created_at,
+                **access_fields,
+            }
+            for (text, page), vector in zip(pieces, vectors)
+        ]
+
+        # Save the document's processing status and metadata.
+        documents_collection.update_one(
+            {"document_uuid": document_uuid},
+            {
+                "$set": {
+                    "document_name": source_name,
+                    "file_hash": file_hash,
+                    "page_count": content.page_count,
+                    "status": "processing",
+                    "ingestion_error": None,
+                    "updated_at": created_at,
+                },
+                "$setOnInsert": {
+                    "document_uuid": document_uuid,
+                    "created_at": created_at,
+                },
+            },
+            upsert=True,
+        )
+
+        # Replace the previous chunks only after extraction and embedding both succeeded.
+        documents_chunk_collection.delete_many(
+            {"document_uuid": document_uuid}
+        )
+        documents_chunk_collection.insert_many(chunk_records)
+
+        # Prepare the latest document metadata for Neo4j.
+        graph_document = documents_collection.find_one(
+            {"document_uuid": document_uuid}
+        )
+
+        if not graph_document:
+            raise RuntimeError(
+                "Document metadata was not found after saving."
+            )
+
+        # Sync document and chunks to Neo4j.
+        graph_result = sync_document_graph(
+            graph_document,
+            chunk_records,
+        )
+
+        # Mark ingestion complete. A graph failure is recorded separately
+        # so you can retry graph synchronization without losing that status.
+        documents_collection.update_one(
+            {"document_uuid": document_uuid},
+            {
+                "$set": {
+                    "status": "completed",
+                    "chunk_count": len(chunk_records),
+                    "processed_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+
+        return {
+            "message": "Document ingested successfully.",
+            "document_uuid": document_uuid,
+            "chunk_count": len(chunk_records),
+            **graph_result,
+        }
+
+    except HTTPException as exc:
+        _mark_failed(document_uuid, exc.detail)
+        raise
+
+    except Exception as exc:
+        traceback.print_exc()  # full detail stays in the backend logs
+        _mark_failed(document_uuid, exc)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Document ingestion failed. Check the backend logs.",
+        ) from exc

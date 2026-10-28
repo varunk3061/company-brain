@@ -1,108 +1,35 @@
-import BASE_URL from "../lib/api";
+import { api } from "./http";
 
-function getAdminToken() {
-  const token =
-    localStorage.getItem("access_token") ||
-    sessionStorage.getItem("access_token");
+// Must match MAX_UPLOAD_MB on the backend. The server enforces it; this check only saves a wasted upload.
+export const MAX_UPLOAD_MB = 25;
 
-  if (!token) {
-    throw new Error("Admin authentication token not found. Please log in again.");
-  }
-  return token;
-}
+// Upload one PDF: stored in the private bucket, registered, then chunked + embedded.
+export const uploadDocument = (file) => {
+  const form = new FormData();
+  form.append("file", file);
+  return api("/api/documents/upload", { method: "POST", body: form });
+};
 
-// 1. Send folder path to backend to scan & store documents in MongoDB
-export async function scanFolder(folderPath) {
-  const token = getAdminToken();
+// Short-lived link to the original PDF; the server checks the caller may read the document.
+export const getDocumentViewUrl = (documentUuid) =>
+  api(`/api/documents/${documentUuid}/view-url`);
 
-  const response = await fetch(`${BASE_URL}/api/documents/scan-folder`, {
+// Legacy: register the PDFs in a server-side folder and make them searchable (chunk + embed).
+export const scanFolder = (folderPath) =>
+  api("/api/documents/scan-and-ingest", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ folder_path: folderPath }),
+    body: { folder_path: folderPath },
   });
 
-  const data = await response.json().catch(() => ({}));
+// Documents the signed-in user is allowed to see.
+export const getDocuments = () => api("/api/documents/");
 
-  if (!response.ok) {
-    throw new Error(data.detail || `Scan failed (${response.status}).`);
-  }
-
-  return data;
-}
-
-// 2. Fetch all registered documents from MongoDB
-export async function getDocuments() {
-  const token = getAdminToken();
-
-  const response = await fetch(`${BASE_URL}/api/documents/`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+// access: { department_code, classification, access: { departments, roles, users } }
+export const updateDocumentAccess = (documentUuid, access) =>
+  api(`/api/documents/${documentUuid}/access`, {
+    method: "PATCH",
+    body: access,
   });
 
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.detail || `Unable to load documents (${response.status}).`);
-  }
-
-  return data;
-}
-
-// 3. Update roles permitted to access a document
-export async function updateDocumentPermissions(documentUuid, allowedRoles) {
-  const token = getAdminToken();
-
-  const response = await fetch(
-    `${BASE_URL}/api/documents/${documentUuid}/permissions`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ allowed_roles: allowedRoles }),
-    }
-  );
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(
-      data.detail || `Unable to update permissions (${response.status}).`
-    );
-  }
-
-  return data;
-}
-
-// 4. Delete a registered document from MongoDB
-export async function deleteDocument(documentUuid) {
-  const token = getAdminToken();
-
-  const response = await fetch(
-    `${BASE_URL}/api/documents/${documentUuid}`,
-    {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(
-      data.detail ||
-      data.error ||
-      `Unable to delete document (${response.status}).`
-    );
-  }
-
-  return data;
-}
+export const deleteDocument = (documentUuid) =>
+  api(`/api/documents/${documentUuid}`, { method: "DELETE" });

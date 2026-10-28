@@ -1,30 +1,80 @@
+from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr
+
+#--------------------------------------------------------------------------------------------
+
+UserStatus = Literal["active", "blocked"]
+
+#--------------------------------------------------------------------------------------------
 
 class UserCreate(BaseModel):
-    name: str = Field(min_length=3, max_length=10)
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=100)
     email: EmailStr
-    password: str = Field(min_length=3, max_length=14)
-    department: str = Field(default="IT", max_length=20)
+    password: SecretStr = Field(min_length=12, max_length=72)
+    department_code: str
+    role_code: str
 
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, value:str) -> str:
-        value = value.strip().lower()
 
-        if "@" not in value or "." not in value.rsplit("@",1)[-1]:
-            raise ValueError("Enter a valid email address")
+class UserUpdate(BaseModel):
+    """Fields an admin can change. Omitted fields stay as they are."""
 
-        return value
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    department_code: str | None = None
+    role_code: str | None = None
+    status: UserStatus | None = None
+
 
 class UserResponse(BaseModel):
-    user_uuid:str
-    name:str
-    email:str
-    role: Literal["admin" , "employee"]
-    department:str
-    is_active: bool
+    """Safe user fields returned by the API (never the hash or Mongo _id)."""
 
-class AdminLogin(BaseModel):
+    user_uuid: str
+    name: str
+    email: EmailStr
+    department_code: str
+    department_name: str
+    role_code: str
+    role_name: str
+    status: UserStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserListResponse(BaseModel):
+    items: list[UserResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    password: SecretStr = Field(min_length=1, max_length=72)
+
+
+class SessionUser(BaseModel):
+    """What the UI needs to render navigation; the server still enforces every rule."""
+
+    user_uuid: str
+    name: str
     email: str
-    password: str
+    department_code: str
+    department_name: str
+    role_code: str
+    role_name: str
+    clearance: str
+    permissions: list[str]
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: SessionUser

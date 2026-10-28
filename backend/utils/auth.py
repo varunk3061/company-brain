@@ -1,162 +1,111 @@
-import os
-
 from datetime import datetime, timezone, timedelta
 
-from dotenv import load_dotenv
-from jose import jwt, JWTError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
 
-from database.connection import admins_collection, employees_collection
-from utils.security import (
-    SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, verify_password
-)
+from database.connection import users_collection, roles_collection
+from services.access.policy import UserContext
+from utils.security import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 #-------------------------------------------------------------------------------------------------
-
-load_dotenv()
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
 #-------------------------------------------------------------------------------------------------
 
-def create_access_token(admin:dict) -> str:
-    """Create a signed JWT for an authenticate admin"""
+def create_access_token(user: dict) -> str:
+    """Create a signed JWT. It carries identity only; rights are re-read from the DB on every request."""
 
     now = datetime.now(timezone.utc)
 
     payload = {
-        "sub" : admin["email"],
-        "admin_uuid" : admin["admin_uuid"],
-        "role" : "admin",
-        "iat" : now,
-        "exp" : now + timedelta(
-            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-        ),
+        "sub": user["user_uuid"],
+        "iat": now,
+        "exp": now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     }
 
-    return jwt.encode(
-        payload, SECRET_KEY, algorithm=ALGORITHM
-    )
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 #-------------------------------------------------------------------------------------------------
 
-def verify_access_token(token:str) :
-    """Decode a token or return None if it is invalid."""
+def verify_access_token(token: str):
+    """Decode a token or return None if it is invalid or expired."""
 
     try:
-        return jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM]
-        )
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return None
 
 #-------------------------------------------------------------------------------------------------
 
-def get_current_admin( credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme) ) -> dict:
-    """Allow access only to a valid, existing admin"""
+def build_user_context(user: dict) -> UserContext:
+    """Combine a users row with its role's current clearance and permissions."""
 
-    unauthorized_error = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired authentication token",
-        headers={"www-Authenticate" : "Bearer"}
-    )
+    role = roles_collection.find_one({"code": user.get("role_code")})
 
-    if credentials is None:
-        raise unauthorized_error
-
-    payload = verify_access_token(credentials.credentials)
-
-    if payload is None:
-        raise unauthorized_error
-
-    if payload.get("role") != "admin":
+    if not role or role.get("status") != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
+            detail="Your account has no active role.",
         )
 
-    admin_uuid = payload.get("admin_uuid")
-    email = payload.get("sub")
-
-    if not admin_uuid or not email:
-        raise unauthorized_error
-
-    # Check that the admin still exists in MongoDB.
-    admin = admins_collection.find_one({
-        "admin_uuid" : admin_uuid,
-        "email" : email,
-    })
-
-    if not admin:
-        raise unauthorized_error
-
-    return admin
-
-#-------------------------------------------------------------------------------------------------
-
-def create_employee_access_token(employee: dict) -> str:
-    """Create a JWT for an employee."""
-
-    now = datetime.now(timezone.utc)
-
-    payload = {
-        "sub" : employee["email"],
-        "employee_uuid" : employee["employee_uuid"],
-        "role" : "employee",
-        "iat" : now,
-        "exp" : now + timedelta(
-            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-        ),
-    }
-
-    return jwt.encode(
-        payload, SECRET_KEY, algorithm=ALGORITHM
+    return UserContext(
+        user_uuid=user["user_uuid"],
+        name=user["name"],
+        email=user["email"],
+        department_code=user["department_code"],
+        role_code=role["code"],
+        role_name=role["name"],
+        clearance=role["clearance"],
+        permissions=frozenset(role.get("permissions", [])),
     )
 
 #-------------------------------------------------------------------------------------------------
 
-def get_current_employee(credentials : HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict :
-    """Allow only active employee with valid tokens"""
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> UserContext:
+    """Resolve the caller from the DB on every request, so blocking or role changes apply immediately."""
 
-    unauthorized_error = HTTPException(
+    unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or Expired authentication token.",
+        detail="Invalid or expired authentication token",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
     if credentials is None:
-        raise unauthorized_error
+        raise unauthorized
 
-    payload =verify_access_token(credentials.credentials)
+    payload = verify_access_token(credentials.credentials)
 
-    if not payload:
-        raise unauthorized_error
+    if not payload or not payload.get("sub"):
+        raise unauthorized
 
-    if payload.get("role") != "employee":
+    user = users_collection.find_one({"user_uuid": payload["sub"]})
+
+    if not user:
+        raise unauthorized
+
+    if user.get("status") != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Employee access required."
+            detail="Your account is blocked",
         )
 
-    employee_uuid = payload.get("employee_uuid")
-    email = payload.get("sub")
+    return build_user_context(user)
 
-    if not employee_uuid or not email:
-        raise unauthorized_error
+#-------------------------------------------------------------------------------------------------
 
-    employee = employees_collection.find_one({
-        "employee_uuid" : employee_uuid,
-        "email" : email,
-    })
+def require_permission(permission: str):
+    """Dependency factory: allow only callers whose role grants `permission`."""
 
-    if not employee:
-        raise unauthorized_error
+    def dependency(ctx: UserContext = Depends(get_current_user)) -> UserContext:
+        if not ctx.has(permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action",
+            )
+        return ctx
 
-    if employee.get("status") != "active":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your Employee Account is Blocked",
-        )
-    
-    return employee
+    return dependency

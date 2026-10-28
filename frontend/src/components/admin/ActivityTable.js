@@ -1,41 +1,24 @@
 import Link from "next/link";
+import Badge from "@/components/ui/Badge";
+import DepartmentBadge from "@/components/ui/DepartmentBadge";
 import { FilePlusIcon, RefreshIcon, UserPlusIcon } from "./icons";
 
 const EVENT_ICONS = {
-  upload: { Icon: FilePlusIcon, tone: "text-indigo-500" },
-  "user-add": { Icon: UserPlusIcon, tone: "text-emerald-500" },
-  sync: { Icon: RefreshIcon, tone: "text-indigo-500" },
+  upload: { Icon: FilePlusIcon, tone: "text-brand-text" },
+  "user-add": { Icon: UserPlusIcon, tone: "text-success" },
+  sync: { Icon: RefreshIcon, tone: "text-brand-text" },
 };
 
-const DEPT_TONES = {
-  HR: "bg-violet-50 text-violet-600",
-  Engineering: "bg-sky-50 text-sky-600",
-  IT: "bg-sky-50 text-sky-600",
-  Finance: "bg-amber-50 text-amber-700",
-  Support: "bg-rose-50 text-rose-600",
-  Operations: "bg-teal-50 text-teal-700",
-  System: "bg-slate-100 text-slate-600",
-};
-
-const STATUS_TONES = {
-  Indexed: "bg-emerald-50 text-emerald-700",
-  Success: "bg-emerald-50 text-emerald-700",
-  Completed: "bg-emerald-50 text-emerald-700",
-  Created: "bg-emerald-50 text-emerald-700",
-  Registered: "bg-emerald-50 text-emerald-700",
-  Failed: "bg-red-50 text-red-700",
-};
-
-const COLUMNS = ["Event / Action", "Actor / User", "Department", "Status", "Timestamp"];
+const COLUMNS = ["Event", "Actor", "Department", "Status", "Time"];
 
 export default function ActivityTable({ rows = [], emptyMessage = "No recent activity yet." }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
       <div className="flex items-center justify-between gap-4 px-6 py-5">
-        <h2 className="text-base font-semibold text-slate-900">Recent System Activity &amp; Ingestion</h2>
+        <h2 className="text-base font-semibold text-ink">Recent Activity</h2>
         <Link
           href="/admin/audit-logs"
-          className="shrink-0 text-sm font-medium text-indigo-600 hover:text-indigo-700 focus:outline-none focus-visible:underline"
+          className="shrink-0 text-sm font-medium text-brand-text hover:underline"
         >
           View All Audit Logs
         </Link>
@@ -44,18 +27,18 @@ export default function ActivityTable({ rows = [], emptyMessage = "No recent act
       <div className="overflow-x-auto">
         <table className="w-full min-w-190 text-left">
           <thead>
-            <tr className="border-y border-slate-200 bg-slate-50">
+            <tr className="border-y border-line bg-surface-2">
               {COLUMNS.map((c) => (
-                <th key={c} scope="col" className="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <th key={c} scope="col" className="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-ink-3">
                   {c}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-line">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={COLUMNS.length} className="px-6 py-10 text-center text-sm text-slate-400">
+                <td colSpan={COLUMNS.length} className="px-6 py-10 text-center text-sm text-ink-3">
                   {emptyMessage}
                 </td>
               </tr>
@@ -63,25 +46,21 @@ export default function ActivityTable({ rows = [], emptyMessage = "No recent act
             {rows.map((r) => {
               const { Icon, tone } = EVENT_ICONS[r.type] ?? EVENT_ICONS.sync;
               return (
-                <tr key={r.id} className="transition hover:bg-slate-50/60">
+                <tr key={r.id} className="transition hover:bg-surface-2/60">
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-3 text-sm text-slate-800">
+                    <div className="flex items-center gap-3 text-sm text-ink">
                       <Icon className={`h-4.5 w-4.5 shrink-0 ${tone}`} />
                       {r.event || "-"}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-700">{r.actor || "-"}</td>
+                  <td className="px-6 py-4 text-sm text-ink-2">{r.actor || "-"}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${DEPT_TONES[r.dept] ?? DEPT_TONES.System}`}>
-                      {r.dept || "-"}
-                    </span>
+                    <DepartmentBadge code={r.dept}>{r.dept || "-"}</DepartmentBadge>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_TONES[r.status] ?? STATUS_TONES.Success}`}>
-                      {r.status || "-"}
-                    </span>
+                    <Badge tone={r.status === "Failed" ? "danger" : "success"}>{r.status || "-"}</Badge>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-400">{r.time || "-"}</td>
+                  <td className="px-6 py-4 text-sm text-ink-3">{r.time || "-"}</td>
                 </tr>
               );
             })}

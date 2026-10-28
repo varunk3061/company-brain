@@ -24,12 +24,12 @@
 //         type="button"
 //         onClick={handleSync}
 //         disabled={state === "syncing"}
-//         className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-70"
+//         className="flex items-center gap-2 rounded-control bg-brand px-5 py-3 text-sm font-semibold text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/25 disabled:opacity-70"
 //       >
 //         <RefreshIcon className={`h-4 w-4 ${state === "syncing" ? "animate-spin" : ""}`} />
 //         {state === "syncing" ? "Syncing..." : "Sync RAG Vector Index"}
 //       </button>
-//       <p aria-live="polite" className="h-4 text-xs text-emerald-600">
+//       <p aria-live="polite" className="h-4 text-xs text-success">
 //         {state === "done" && (
 //           <span className="inline-flex items-center gap-1">
 //             <CheckIcon className="h-3.5 w-3.5" />
