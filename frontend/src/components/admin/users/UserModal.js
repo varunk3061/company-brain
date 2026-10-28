@@ -161,8 +161,8 @@ export default function UserModal({
     if (!editing) {
       if (!password) {
         nextErrors.password = "Enter a temporary password.";
-      } else if (password.length < 12) {
-        nextErrors.password = "Password must contain at least 12 characters.";
+      } else if (password.length < 6) {
+        nextErrors.password = "Password must contain at least 6 characters.";
       } else if (new TextEncoder().encode(password).length > 72) {
         nextErrors.password = "Password must not exceed 72 UTF-8 bytes.";
       }

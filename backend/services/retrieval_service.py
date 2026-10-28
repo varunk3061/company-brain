@@ -1,96 +1,4 @@
-# from fastapi import HTTPException
-
-# from collections import defaultdict
-# from database.connection import documents_chunk_collection
-# from database.neo4j_connection import (get_neo4j_driver, NEO4J_DATABASE)
-# from services.access.policy import (UserContext, build_document_filter)
-# from services.embedding_service import get_embedding
-
-# #-------------------------------------------------------------------------------------
-
-# # IMPORTANT: This must exactly match your MongoDB Atlas index name.
-# VECTOR_INDEX_NAME = "vector_index"
-
-# #-------------------------------------------------------------------------------------
-
-# def retrieve_relevant_chunks(question: str, ctx: UserContext, limit: int = 10, max_per_document: int = 4,) -> list:
-#     """Top chunks for `question` that `ctx` is allowed to see.
-
-#     The permission filter is applied INSIDE the vector query (pre-filter), never after top-k,
-#     so restricted text never leaves the database for this user.
-#     """
-
-#     try:
-#         question_embedding = get_embedding().embed_query(question)
-
-#         # Retrieve more candidates than we ultimately need.
-#         candidate_limit = 30
-
-#         pipeline = [
-#             {
-#                 "$vectorSearch": {
-#                     "index": VECTOR_INDEX_NAME,
-#                     "path": "embedding",
-#                     "queryVector": question_embedding,
-#                     "numCandidates": 100,
-#                     "limit": candidate_limit,
-
-#                      # Permissions are applied inside vector search.
-#                     "filter": build_document_filter(ctx),
-#                 }
-#             },
-#             {
-#                 "$project": {
-#                     "_id": 0,
-#                     "text": 1,
-#                     "source": 1,
-#                     "page": 1,
-#                     "document_uuid": 1,
-#                     "score": {"$meta": "vectorSearchScore"},
-#                 }
-#             },
-#         ]
-
-#         candidates = list (
-#             documents_chunk_collection.aggregate(pipeline)
-#         )
-
-#         # Prefer relevant chunks from different documents,
-#         # while keeping the original relevance order.
-#         selected_chunks = []
-#         chunks_per_document = defaultdict(int)
-
-#         for chunk in candidates:
-#             document_uuid = chunk.get("document_uuid")
-
-#             if chunks_per_document[document_uuid] >= max_per_document:
-#                 continue
-
-#             selected_chunks.append(chunk)
-#             chunks_per_document[document_uuid] += 1
-
-#             if len(selected_chunks) >= limit:
-#                 break
-
-#         return selected_chunks
-
-#         # return list(documents_chunk_collection.aggregate(pipeline))
-
-#     except HTTPException:
-#         raise
-
-#     except Exception as exc:
-#         print(
-#             f"Document retrieval error: "
-#             f"{type(exc).__name__}: {exc}"
-#         )
-
-#         raise HTTPException(
-#             status_code=500,
-#             detail="Could not retrieve relevant document chunks.",
-#         ) from exc
-
-
+import re
 
 from collections import defaultdict
 
@@ -113,6 +21,9 @@ VECTOR_INDEX_NAME = "vector_index"
 
 # Maximum number of additional documents discovered through Neo4j.
 MAX_GRAPH_DOCUMENTS = 10
+
+# Maximum number of chunks found through entity matching.
+MAX_ENTITY_CHUNKS = 15
 
 
 def _vector_search(
@@ -201,6 +112,93 @@ def _find_related_document_uuids(seed_document_uuids: list) -> list:
             for record in records
             if record.get("document_uuid")
         ]
+
+
+def _normalize_text(text: str) -> str:
+    """Lowercase, keep letters/digits only, pad with spaces so we match whole words."""
+    return " " + re.sub(r"[^a-z0-9]+", " ", str(text).lower()).strip() + " "
+
+
+def _find_entity_chunk_uuids(question: str) -> list:
+    """
+    Ask Neo4j for chunks that mention entities named in the question,
+    or entities directly related to them.
+
+    Only chunk IDs are returned. Content is loaded from MongoDB
+    with the user's permission filter.
+    """
+
+    driver = get_neo4j_driver()
+    question_text = _normalize_text(question)
+
+    with driver.session(database=NEO4J_DATABASE) as session:
+        # 1. Entities whose name appears in the question as whole words.
+        #    Keys shorter than 3 characters are skipped (too many false matches).
+        keys = [
+            record["key"]
+            for record in session.run("MATCH (e:Entity) RETURN e.key AS key")
+            if record["key"]
+            and len(record["key"]) >= 3
+            and _normalize_text(record["key"]) in question_text
+        ]
+
+        if not keys:
+            return []
+
+        # 2. Chunks mentioning those entities or their direct neighbours.
+        records = session.run(
+            """
+            MATCH (e:Entity) WHERE e.key IN $keys
+            OPTIONAL MATCH (e)-[:RELATED_TO]-(n:Entity)
+            WITH collect(DISTINCT e) + collect(DISTINCT n) AS entities
+            UNWIND entities AS ent
+            MATCH (c:Chunk)-[:MENTIONS]->(ent)
+            RETURN DISTINCT c.chunk_uuid AS chunk_uuid
+            LIMIT $max_chunks
+            """,
+            keys=keys,
+            max_chunks=MAX_ENTITY_CHUNKS,
+        )
+
+        return [record["chunk_uuid"] for record in records if record["chunk_uuid"]]
+
+
+def _load_entity_chunks(chunk_uuids: list, ctx: UserContext, question_embedding: list) -> list:
+    """
+    Load entity-matched chunks from MongoDB WITH the permission filter,
+    and score them like $vectorSearch does (cosine -> (1 + cos) / 2).
+    """
+
+    if not chunk_uuids:
+        return []
+
+    query = {
+        "$and": [
+            build_document_filter(ctx),
+            {"chunk_uuid": {"$in": chunk_uuids}},
+        ]
+    }
+
+    projection = {
+        "_id": 0,
+        "chunk_uuid": 1,
+        "text": 1,
+        "source": 1,
+        "page": 1,
+        "document_uuid": 1,
+        "embedding": 1,
+    }
+
+    chunks = []
+
+    for chunk in documents_chunk_collection.find(query, projection):
+        # Embeddings are normalized, so the dot product is the cosine similarity.
+        embedding = chunk.pop("embedding", None) or []
+        cosine = sum(a * b for a, b in zip(question_embedding, embedding))
+        chunk["score"] = (1 + cosine) / 2
+        chunks.append(chunk)
+
+    return chunks
 
 
 def _select_chunks(
@@ -309,9 +307,23 @@ def retrieve_relevant_chunks(
             )
             graph_chunks = []
 
-        # 4. Combine vector and graph-assisted candidates.
+        # 3b. Entity graph: chunks mentioning entities named in the question.
+        # Neo4j gives chunk IDs only; MongoDB applies the permission filter.
+        try:
+            entity_chunk_uuids = _find_entity_chunk_uuids(question)
+            entity_chunks = _load_entity_chunks(entity_chunk_uuids, ctx, question_embedding)
+
+        except Exception as entity_exc:
+            # The entity graph is an enhancement, not a requirement for basic RAG.
+            print(
+                "Entity-graph retrieval unavailable: "
+                f"{type(entity_exc).__name__}: {entity_exc}"
+            )
+            entity_chunks = []
+
+        # 4. Combine vector, topic-graph and entity-graph candidates.
         # Duplicate chunks are removed and higher scores are prioritized.
-        all_candidates = initial_chunks + graph_chunks
+        all_candidates = initial_chunks + graph_chunks + entity_chunks
 
         return _select_chunks(
             candidates=all_candidates,

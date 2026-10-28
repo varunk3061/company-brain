@@ -1,3 +1,4 @@
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -16,12 +17,35 @@ router = APIRouter(prefix="/audit-logs", tags=["Audit"])
 def list_audit_logs(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    action: Annotated[str | None, Query(max_length=100)] = None,
+    actor: Annotated[str | None, Query(max_length=100)] = None,
     _: UserContext = Depends(require_permission("audit.read")),
 ):
-    """Admin change history, newest first. Only who/what/when: before/after payloads stay in the database."""
+    """Admin change history, newest first. Only who/what/when: before/after payloads stay in the database.
+
+    Optional filters: `action` (exact action, e.g. "user.create") and `actor` (part of the actor's
+    name or email, case-insensitive; "system" matches system actions).
+    """
+
+    query = {}
+
+    if action and action.strip():
+        query["action"] = action.strip()
+
+    if actor and actor.strip():
+        term = actor.strip()
+        contains = {"$regex": re.escape(term), "$options": "i"}
+        matching_ids = [
+            u["user_uuid"]
+            for u in users_collection.find({"$or": [{"name": contains}, {"email": contains}]}, {"user_uuid": 1})
+        ]
+        actor_ids_filter = [{"actor_uuid": {"$in": matching_ids}}]
+        if term.lower() in "system":
+            actor_ids_filter.append({"actor_uuid": None})
+        query["$or"] = actor_ids_filter
 
     rows = list(
-        audit_log_collection.find({}, {"_id": 0})
+        audit_log_collection.find(query, {"_id": 0})
         .sort("ts", -1).skip((page - 1) * page_size).limit(page_size)
     )
 
@@ -86,8 +110,10 @@ def list_audit_logs(
 
     return {
         "items": items,
-        "total": audit_log_collection.count_documents({}),
+        "total": audit_log_collection.count_documents(query),
         "page": page,
         "page_size": page_size,
+        # Every action ever recorded, for the filter dropdown.
+        "actions": sorted(a for a in audit_log_collection.distinct("action") if a),
     }
 

@@ -1,0 +1,19 @@
+user_id,name,email,department,role,level,clearance,project_ids,manager_id,status,primary_test_user
+U01,Aarav Mehta,aarav.mehta@nexora-tech.example,Leadership / Administration,CEO / Admin,executive,restricted,,,active,Y
+U02,Neha Kulkarni,neha.kulkarni@nexora-tech.example,HR,HR Business Partner,head,restricted,,U01,active,Y
+U03,Rohan Deshmukh,rohan.deshmukh@nexora-tech.example,HR,HR Operations Specialist,senior,confidential,,U02,active,N
+U04,Priya Nair,priya.nair@nexora-tech.example,HR,Talent Acquisition Specialist,mid,internal,,U02,active,N
+U05,Isha Bhatt,isha.bhatt@nexora-tech.example,HR,HR Generalist,mid,confidential,,U02,active,N
+U06,Karan Joshi,karan.joshi@nexora-tech.example,IT,Developer,junior,confidential,ATLAS,U08,active,Y
+U07,Sneha Patil,sneha.patil@nexora-tech.example,IT,QA Engineer,mid,confidential,ATLAS|COBALT,U08,active,Y
+U08,Vikram Rao,vikram.rao@nexora-tech.example,IT,DevOps Engineer,lead,restricted,ATLAS|BEACON|COBALT,U01,active,N
+U09,Anjali Verma,anjali.verma@nexora-tech.example,Sales,Sales Manager,head,confidential,ATLAS|BEACON|COBALT,U01,active,Y
+U10,Ishaan Gupta,ishaan.gupta@nexora-tech.example,Sales,Sales Development Representative,junior,confidential,,U09,active,Y
+U11,Sameer Khan,sameer.khan@nexora-tech.example,Sales,Relationship Manager (RM),senior,confidential,ATLAS|BEACON,U09,active,Y
+U12,Meera Iyer,meera.iyer@nexora-tech.example,Finance,Financial Analyst,mid,restricted,,U14,active,N
+U13,Farhan Qureshi,farhan.qureshi@nexora-tech.example,Finance,Payroll Specialist,mid,restricted,,U14,active,N
+U14,Suresh Patwardhan,suresh.patwardhan@nexora-tech.example,Finance,Accounting Manager,head,restricted,,U01,active,Y
+U15,Divya Rao,divya.rao@nexora-tech.example,Legal & Compliance,Head of Legal,head,restricted,,U01,active,Y
+U16,Tanvi Shah,tanvi.shah@nexora-tech.example,Legal & Compliance,Compliance Analyst,mid,confidential,,U15,active,N
+U17,Arjun Menon,arjun.menon@nexora-tech.example,Legal & Compliance,Legal Counsel / Contracts Specialist,senior,restricted,ATLAS,U15,active,N
+U18,Rahul Sharma,rahul.sharma@nexora-tech.example,HR,HR Generalist,mid,confidential,,U02,inactive,Y

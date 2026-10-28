@@ -92,6 +92,7 @@ company_brain/
 ├── frontend/           Next.js app (see frontend/AGENTS.md)
 ├── Documents/          Assignment brief + detailed assignment (requirements)
 ├── reports/            Generated artefacts (org chart, eval reports, red-team reports)
+├── README.md           Project overview, setup and admin-portal features
 └── AGENTS.md           This file
 ```
 
@@ -140,7 +141,7 @@ API docs: http://127.0.0.1:8000/docs (Swagger) · http://127.0.0.1:8000/redoc
 | 1. Platform — auth, users, departments, roles | 🟢 Done (v1) | Unified `users`, 6 departments + 19 roles from `Documents/orgChart.docx`, role-based permissions, one login |
 | 1. Platform — documents CRUD, versions | 🟡 Partial | Folder scan registers PDFs; owner dept + classification + explicit grants enforced on listing; delete. No upload/versioning yet |
 | 1. Platform — approval workflow | 🔴 Not started | |
-| 1. Platform — audit trail | 🟡 Partial | Admin changes (users, org, document access) are written to `audit_log`; no query audit or viewer yet |
+| 1. Platform — audit trail | 🟡 Partial | Admin changes (users, org, document access, views) and `rag.ask` are written to `audit_log`; admin viewer at `/admin/audit-logs` with action/actor filters and per-action colour tags. Full query audit (retrieved chunks, guard flags) not yet |
 | 2. Document validation pipeline | 🔴 Not started | |
 | 3. Knowledge layer — vector index | 🟡 Baseline | PDFs are chunked and embedded (MiniLM, 384-d) into `documents_chunk` with a copy of their access fields; Atlas `vector_index` pre-filters on them |
 | 3. Knowledge layer — knowledge graph | 🔴 Not started | |
@@ -149,6 +150,8 @@ API docs: http://127.0.0.1:8000/docs (Swagger) · http://127.0.0.1:8000/redoc
 | MCP server | 🔴 Not started | |
 
 Keep this table up to date in the PR that changes it.
+
+**Admin portal UI (latest changes).** Row actions in Users and Documents are icon buttons (`lucide-react`, with tooltips); Documents shows explicit access grouped as Departments / Roles / Users, has an eye icon to preview the stored PDF in a modal (short-lived presigned link from the backend), and filters by title, owner department, classification and access department; Users filters by name/email and department; Audit Logs filters by action and actor and colours each action differently; all dates use one compact format (`28 Oct 2026` / `08:08 PM`). Details: `frontend/AGENTS.md` §5b, `backend/AGENTS.md` §4 (Audit).
 
 ---
 
