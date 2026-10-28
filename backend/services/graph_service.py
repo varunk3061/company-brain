@@ -429,3 +429,49 @@ def sync_document_to_graph(document, chunk_records):
     # Apply the document update as one transaction.
     with driver.session(database=NEO4J_DATABASE) as session:
         session.execute_write(write_graph)
+
+#---------------------------------------------------------------------------------------------------------------
+
+def delete_document_from_graph(document_uuid):
+    """Remove a document and its chunk from neo4j. Shared topic nodes are kept. """
+
+    driver = get_neo4j_driver()
+
+    with driver.session(database=NEO4J_DATABASE) as session:
+        session.run(
+            """
+            MATCH (d:Document {document_uuid: $document_uuid})
+            OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk)
+            DETACH DELETE c, d
+            """,
+            document_uuid = document_uuid,
+        ).consume()
+
+#---------------------------------------------------------------------------------------------------------------
+
+def update_document_access_in_graph(document_uuid, department_code, classification, access):
+    """Copy a document's new access rules onto its Document and chunk nodes."""
+
+    driver = get_neo4j_driver()
+    access = access or {}
+
+    with driver.session(database=NEO4J_DATABASE) as session:
+        session.run(
+            """
+            MATCH (d:Document {document_uuid: $document_uuid})
+            OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk)
+            with collect(d) + collect(c) as nodes
+            UNWIND nodes as n
+            SET n.department_code = $department_code,
+                   n.classification = $classification,
+                   n.access_departments = $access_departments,
+                   n.access_roles = $access_roles,
+                   n.access_users = $access_users
+            """,
+            document_uuid = document_uuid,
+            department_code = department_code,
+            classification = classification,
+            access_departments = access.get("departments", []),
+            access_roles = access.get("roles", []),
+            access_users = access.get("users", [],)
+        ).consume()

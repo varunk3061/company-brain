@@ -15,6 +15,7 @@ from database.connection import (
 from services import audit_service
 from services.access.policy import UserContext, build_document_filter
 from models.document_model import DocumentAccessUpdate
+from services.graph_service import delete_document_from_graph, update_document_access_in_graph
 
 #-----------------------------------------------------------------------------------------------------------
 
@@ -244,6 +245,17 @@ def update_document_access(document_uuid: str, data: DocumentAccessUpdate, actor
         {"$set": {k: after[k] for k in ("department_code", "classification", "access")}},
     )
 
+    # Keep Neo4j access fields in step with MongoDB.
+    try :
+        update_document_access_in_graph(
+            document_uuid,
+            after["department_code"],
+            after["classification"],
+            after["access"]
+        )
+    except Exception as exc:
+        print(f"Graph access update failed for {document_uuid} : exc")
+
     doc_name = before.get("document_name") or document_uuid
     audit_service.record(
         actor, "document.access.update", doc_name,
@@ -268,6 +280,12 @@ def delete_document(document_uuid: str, actor: UserContext):
 
     documents_collection.delete_one({"document_uuid": document_uuid})
     documents_chunk_collection.delete_many({"document_uuid": document_uuid})
+
+    # Keep Neo4j in step with MongoDB. A graph error must not block the delete
+    try : 
+        delete_document_from_graph(document_uuid)
+    except Exception as exc:
+        print(f"Graph delete failed for {document_uuid} : {exc}")
 
     doc_name = doc.get("document_name") or document_uuid
     audit_service.record(actor, "document.delete", doc_name, before={"document_name": doc_name})

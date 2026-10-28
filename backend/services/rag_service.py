@@ -231,7 +231,7 @@ def ingest_document(document: Union[dict, str]):
                 continue
 
             # Generate a vector embedding for the chunk.
-            embedding = get_embedding(text_content)
+            embedding = get_embedding().embed_query(text_content)
 
             # PyPDFLoader uses zero-based page metadata.
             page_number = chunk.metadata.get("page", 0) + 1
