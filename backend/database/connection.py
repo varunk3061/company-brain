@@ -60,6 +60,11 @@ def create_indexes():
     documents_collection.create_index(
         [("department_code", ASCENDING), ("classification", ASCENDING)], name="document_dept_class"
     )
+    # Uploaded PDFs are de-duplicated by content. Partial: older folder-scan records have no content_hash.
+    documents_collection.create_index(
+        [("content_hash", ASCENDING)], unique=True, name="unique_content_hash",
+        partialFilterExpression={"content_hash": {"$type": "string"}},
+    )
     audit_log_collection.create_index([("ts", -1)], name="audit_ts")
 
     documents_chunk_collection.create_index([("chunk_uuid", ASCENDING)], unique=True, name="unique_chunk_uuid")

@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 
@@ -12,14 +13,17 @@ from database.connection import (
     departments_collection, documents_chunk_collection, documents_collection,
     roles_collection, users_collection,
 )
-from services import audit_service
-from services.access.policy import UserContext, build_document_filter
+from services import audit_service, storage_service
+from services.access.policy import UserContext, build_document_filter, can_view
+from services.pdf_service import MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, read_pdf, sha256_hex
 from models.document_model import DocumentAccessUpdate
 from services.graph_service import delete_document_from_graph, update_document_access_in_graph
 
 #-----------------------------------------------------------------------------------------------------------
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 #-----------------------------------------------------------------------------------------------------------
 
@@ -184,6 +188,10 @@ PUBLIC_FIELDS = {
     "classification": 1,
     "access": 1,
     "needs_classification": 1,
+    "size_bytes": 1,
+    "page_count": 1,
+    "status": 1,
+    "chunk_count": 1,
 }
 
 
@@ -268,15 +276,20 @@ def update_document_access(document_uuid: str, data: DocumentAccessUpdate, actor
 #-----------------------------------------------------------------------------------------------------------
 
 def delete_document(document_uuid: str, actor: UserContext):
-    """Delete a registered document using its UUID."""
+    """Delete a document: its stored PDF (R2), its record and its chunks."""
 
-    doc = documents_collection.find_one({"document_uuid": document_uuid}, {"document_name": 1})
+    doc = documents_collection.find_one({"document_uuid": document_uuid}, {"document_name": 1, "object_key": 1})
 
     if not doc:
         raise HTTPException(
             status_code=404,
             detail="Document not found."
         )
+
+    # Remove the stored file first: if R2 fails, nothing is deleted and the admin can retry.
+    # Deleting a key that is already gone succeeds, so retries are safe.
+    if doc.get("object_key"):
+        storage_service.delete_object(doc["object_key"])
 
     documents_collection.delete_one({"document_uuid": document_uuid})
     documents_chunk_collection.delete_many({"document_uuid": document_uuid})
@@ -346,3 +359,142 @@ def scan_and_ingest_pdf_folder(folder_path: str):
         "ingestion_errors": ingestion_errors,
         "message": "Folder scan and ingestion finished.",
     }
+
+#-----------------------------------------------------------------------------------------------------------
+
+def _clean_filename(name) -> str:
+    """Keep only the file's own name (no folders), without control characters, at most 200 chars."""
+
+    base = str(name or "").replace("\\", "/").split("/")[-1]
+    base = "".join(c for c in base if c.isprintable()).strip()
+
+    if len(base) > 200:
+        stem, dot, ext = base.rpartition(".")
+        base = (stem[: 200 - len(ext) - 1] + dot + ext) if dot else base[:200]
+
+    return base or "document.pdf"
+
+
+def _read_upload(file) -> bytes:
+    """Read at most the size limit + 1 byte, so an oversized file is rejected without reading all of it."""
+
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
+
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"The file is larger than {MAX_UPLOAD_MB} MB.")
+
+    return data
+
+
+def upload_document(file, actor: UserContext):
+    """Store an uploaded PDF in the private R2 bucket, register it, then chunk and embed it."""
+
+    from services.rag_service import ingest_document  # heavy imports stay lazy
+
+    document_name = _clean_filename(file.filename)
+
+    if not document_name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=415, detail="Only PDF files are supported.")
+
+    data = _read_upload(file)
+    pdf = read_pdf(data, extract_text=False)  # size, %PDF- header, readable, not password-protected
+    content_hash = sha256_hex(data)
+
+    # Same bytes already registered (by an earlier upload, or by the legacy folder scan)?
+    duplicate = documents_collection.find_one(
+        {"$or": [{"content_hash": content_hash}, {"file_hash": content_hash}]},
+        {"_id": 0, "document_name": 1},
+    )
+
+    if duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This PDF is already uploaded as '{duplicate.get('document_name')}'.",
+        )
+
+    document_uuid = str(uuid.uuid4())
+    object_key = storage_service.object_key_for(document_uuid)
+    now = datetime.now(timezone.utc)
+
+    storage_service.put_pdf(object_key, data, content_hash)
+
+    document = {
+        "document_uuid": document_uuid,
+        "document_name": document_name,
+        "category": None,
+        "object_key": object_key,
+        "content_hash": content_hash,
+        "size_bytes": len(data),
+        "page_count": pdf.page_count,
+        "pdf_metadata": pdf.metadata,
+        # Safe defaults for a new file; an admin must classify it.
+        "department_code": None,
+        "classification": "internal",
+        "access": {"departments": [], "roles": [], "users": []},
+        "needs_classification": True,
+        "status": "uploaded",
+        "uploaded_by": actor.user_uuid,
+        "created_at": now,
+        "last_update": now,
+    }
+
+    try:
+        documents_collection.insert_one(document)
+
+    except DuplicateKeyError as exc:
+        storage_service.delete_object(object_key)  # keep the bucket clean
+
+        if "content_hash" in str((exc.details or {}).get("keyPattern", "")):
+            # Same content uploaded at the same moment by another request.
+            raise HTTPException(status_code=409, detail="This PDF is already uploaded.") from exc
+
+        # Another unique index (for example an old one on `file_path`) rejected a record without that field.
+        logger.error("Document insert blocked by a unique index: %s", (exc.details or {}).get("keyPattern"))
+        raise HTTPException(status_code=500, detail="Could not register the document. Check the backend logs.") from exc
+
+    except Exception:
+        storage_service.delete_object(object_key)
+        raise
+
+    audit_service.record(
+        actor, "document.upload", document_uuid,
+        after={"document_name": document_name, "size_bytes": len(data), "page_count": pdf.page_count},
+    )
+
+    # The file is safely stored and registered; an ingestion problem is reported, not raised,
+    # so the admin can fix it and re-run POST /api/documents/{uuid}/ingest without uploading again.
+    try:
+        ingestion = {"status": "completed", **ingest_document(document_uuid)}
+    except HTTPException as exc:
+        ingestion = {"status": "failed", "detail": exc.detail}
+
+    return {
+        "message": "Document uploaded.",
+        "document": documents_collection.find_one({"document_uuid": document_uuid}, PUBLIC_FIELDS),
+        "ingestion": ingestion,
+    }
+
+#-----------------------------------------------------------------------------------------------------------
+
+def get_document_view_url(document_uuid: str, ctx: UserContext):
+    """Short-lived link to the original PDF, issued only if the caller may read the document."""
+
+    doc = documents_collection.find_one(
+        {"document_uuid": document_uuid},
+        {"_id": 0, "document_uuid": 1, "document_name": 1, "object_key": 1,
+         "classification": 1, "department_code": 1, "access": 1},
+    )
+
+    # Same answer for "does not exist" and "not allowed", so a refusal never confirms a document exists.
+    # Admin permissions grant management, not reading: everyone goes through can_view.
+    if not doc or not can_view(ctx, doc):
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    if not doc.get("object_key"):
+        raise HTTPException(status_code=409, detail="This document has no stored file to view. Upload it again.")
+
+    url = storage_service.presigned_view_url(doc["object_key"], doc.get("document_name") or "document.pdf")
+
+    audit_service.record(ctx, "document.view", document_uuid)
+
+    return {"url": url, "expires_in": storage_service.PRESIGNED_URL_TTL_SECONDS}

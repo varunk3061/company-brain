@@ -13,8 +13,13 @@ os.environ.update({
 import pytest
 from fastapi.testclient import TestClient
 
+import main
 from database.connection import db
 from main import app
+
+# Tests never need a live Neo4j: graph sync is an enhancement and is faked where a test needs it.
+main.verify_neo4j_connection = lambda: True
+main.initialize_graph = lambda: None
 
 PASSWORD = "a-long-test-password"
 

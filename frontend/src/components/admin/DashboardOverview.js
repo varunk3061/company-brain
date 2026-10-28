@@ -47,21 +47,21 @@ function buildStats(stats = {}) {
       iconTone: "emerald",
       note: { text: `${num(stats.documents_classified)} classified with access rules`, tone: "good", icon: "check" },
     },
-    {
-      id: "queries",
-      label: "Daily RAG Queries",
-      value: num(stats.daily_rag_queries),
-      comingSoon: !FEATURES.usageMetrics,
-      icon: "chat",
-      iconTone: "indigo",
-      note: {
-        text: FEATURES.usageMetrics
-          ? `Avg latency: ${num(stats.avg_latency_ms)}ms`
-          : "Not tracked yet",
-        tone: "muted",
-        icon: "none",
-      },
-    },
+    // {
+    //   id: "queries",
+    //   label: "Daily RAG Queries",
+    //   value: num(stats.daily_rag_queries),
+    //   comingSoon: !FEATURES.usageMetrics,
+    //   icon: "chat",
+    //   iconTone: "indigo",
+    //   note: {
+    //     text: FEATURES.usageMetrics
+    //       ? `Avg latency: ${num(stats.avg_latency_ms)}ms`
+    //       : "Not tracked yet",
+    //     tone: "muted",
+    //     icon: "none",
+    //   },
+    // },
     // {
     //   id: "security",
     //   label: "System Security Status",

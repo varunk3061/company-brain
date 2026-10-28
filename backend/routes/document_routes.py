@@ -1,6 +1,12 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 
-from models.document_model import DocumentAccessUpdate, DocumentResponse, FolderScanRequest
+from models.document_model import (
+    DocumentAccessUpdate,
+    DocumentResponse,
+    DocumentUploadResponse,
+    DocumentViewUrlResponse,
+    FolderScanRequest,
+)
 from services.access.policy import UserContext
 from services.document_service import (
     scan_pdf_folder,
@@ -8,6 +14,8 @@ from services.document_service import (
     update_document_access,
     delete_document,
     scan_and_ingest_pdf_folder,
+    upload_document,
+    get_document_view_url,
 )
 from services.rag_service import ingest_document
 from utils.auth import get_current_user, require_permission
@@ -73,3 +81,24 @@ def ingest_registered_document(
 ):
     """(Re)process one registered PDF."""
     return ingest_document(document_uuid)
+
+#----------------------------------------------------------------------------------------------------------------
+
+@router.post("/upload", response_model=DocumentUploadResponse, status_code=201)
+def upload_pdf(
+    file: UploadFile = File(..., description="One PDF, at most MAX_UPLOAD_MB (default 25 MB)."),
+    actor: UserContext = Depends(require_permission("documents.manage"))
+):
+    """Store one PDF in the private R2 bucket, register it and make it searchable."""
+    # Plain `def`: FastAPI runs it in a worker thread, so PDF parsing and embedding don't block other requests.
+    return upload_document(file, actor)
+
+#----------------------------------------------------------------------------------------------------------------
+
+@router.get("/{document_uuid}/view-url", response_model=DocumentViewUrlResponse)
+def document_view_url(
+    document_uuid: str,
+    ctx: UserContext = Depends(get_current_user)
+):
+    """Short-lived link to the original PDF. Same visibility rule as answers; 404 when not allowed."""
+    return get_document_view_url(document_uuid, ctx)

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { BrainIcon, FileIcon } from "./icons";
+import { getDocumentViewUrl } from "@/services/documentService";
 
 // Supports **bold** and [[file-name.pdf]] links inside answer text.
 function renderInline(text) {
@@ -26,6 +28,70 @@ function renderInline(text) {
       }
       return part;
     });
+}
+
+// A cited document. Clicking asks the backend for a short-lived link (issued only if this user may
+// read the document) and opens the original PDF in a new tab. The browser never holds storage keys.
+function CitationCard({ source }) {
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState("");
+  const canOpen = Boolean(source.document_uuid);
+
+  const open = async () => {
+    if (!canOpen || opening) return;
+
+    // Open the tab inside the click so pop-up blockers allow it, then point it at the link.
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+
+    setOpening(true);
+    setError("");
+
+    try {
+      const { url } = await getDocumentViewUrl(source.document_uuid);
+      if (tab) tab.location.replace(url);
+      else window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      tab?.close();
+      setError(
+        err.message === "Document not found."
+          ? "This document is no longer available to you."
+          : err.message || "Could not open the document.",
+      );
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={open}
+        disabled={!canOpen || opening}
+        title={canOpen ? "Open the PDF in a new tab" : undefined}
+        className="flex w-full items-center gap-3 rounded-control border border-line bg-surface-2 px-4 py-3 text-left transition hover:border-brand/30 hover:bg-brand-tint/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-default"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-danger-soft text-danger">
+          <FileIcon className="h-4.5 w-4.5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-ink">{source.file}</span>
+          <span className="block text-xs text-ink-3">
+            Page {source.page ?? "Unknown"}
+            {canOpen && (
+              <span className="text-brand-text"> · {opening ? "Opening..." : "View PDF"}</span>
+            )}
+          </span>
+        </span>
+      </button>
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-danger">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function BotAvatar() {

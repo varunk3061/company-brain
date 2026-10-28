@@ -1,19 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AlertCircleIcon,
   CheckCircleIcon,
   ChevronDownIcon,
+  CloudUploadIcon,
   FileIcon,
   FolderIcon,
   RefreshIcon,
 } from "../icons";
 import {
+  MAX_UPLOAD_MB,
   scanFolder,
   getDocuments,
   updateDocumentAccess,
   deleteDocument,
+  uploadDocument,
 } from "@/services/documentService";
+import { FEATURES } from "@/config/features";
 import { getDepartments, getRoles } from "@/services/orgService";
 import { getUsers } from "@/services/userService";
 import Badge, { ClassificationBadge } from "@/components/ui/Badge";
@@ -125,6 +130,34 @@ function MultiSelect({ label, options, value, onChange }) {
 const linkBtn =
   "rounded text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
+// 842113 -> "822 KB"
+function formatBytes(bytes) {
+  if (!bytes && bytes !== 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const isPdf = (file) =>
+  file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+// One row per file picked for upload: waiting -> uploading -> done | failed.
+const UPLOAD_TONE = {
+  waiting: "text-ink-3",
+  uploading: "text-ink-2",
+  done: "text-success",
+  failed: "text-danger",
+};
+
+const STATUS_TONE = {
+  completed: "success",
+  processing: "info",
+  uploaded: "info",
+  failed: "danger",
+};
+
 export default function DocumentsManager() {
   const [docs, setDocs] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -151,6 +184,12 @@ export default function DocumentsManager() {
   // Error message shown inside the delete modal
   const [deleteError, setDeleteError] = useState("");
 
+  // PDF uploads (files go to the backend, which stores them in the private bucket)
+  const [uploads, setUploads] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef(null);
+
   const loadDocuments = useCallback(async () => {
     try {
       const result = await getDocuments();
@@ -162,6 +201,9 @@ export default function DocumentsManager() {
           classification: d.classification,
           access: d.access,
           needsClassification: d.needs_classification,
+          pageCount: d.page_count,
+          sizeBytes: d.size_bytes,
+          status: d.status,
           updated: new Date(d.last_update).toLocaleDateString(),
         })),
       );
@@ -245,6 +287,61 @@ export default function DocumentsManager() {
     }
   };
 
+  const setUpload = (id, patch) =>
+    setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+
+  // Check each picked file, then upload the valid ones one at a time (one request per PDF).
+  const handleFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0 || uploading) return;
+
+    const queue = files.map((file, i) => {
+      let message = "";
+      if (!isPdf(file)) message = "Only PDF files are supported.";
+      else if (file.size > MAX_UPLOAD_BYTES) message = `Larger than ${MAX_UPLOAD_MB} MB.`;
+      else if (file.size === 0) message = "The file is empty.";
+
+      return {
+        id: `${Date.now()}-${i}`,
+        file,
+        name: file.name,
+        size: file.size,
+        state: message ? "failed" : "waiting",
+        message,
+      };
+    });
+
+    setUploads(queue);
+    setUploading(true);
+
+    for (const item of queue) {
+      if (item.state === "failed") continue;
+      setUpload(item.id, { state: "uploading", message: "Uploading and indexing..." });
+
+      try {
+        const result = await uploadDocument(item.file);
+        const ingestion = result.ingestion || {};
+        if (ingestion.status === "failed") {
+          setUpload(item.id, {
+            state: "failed",
+            message: `Stored, but not indexed: ${ingestion.detail || "ingestion failed"}`,
+          });
+        } else {
+          setUpload(item.id, {
+            state: "done",
+            message: `Indexed: ${result.document?.page_count ?? "?"} pages, ${ingestion.chunk_count ?? 0} chunks.`,
+          });
+        }
+      } catch (err) {
+        setUpload(item.id, { state: "failed", message: err.message || "Upload failed." });
+      }
+    }
+
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    await loadDocuments();
+  };
+
   const startEdit = (doc) => {
     setDraft({
       department_code: doc.departmentCode ?? "",
@@ -295,12 +392,82 @@ export default function DocumentsManager() {
           Corporate Documents &amp; RAG Validation
         </h1>
         <p className="mt-1 text-sm text-ink-3">
-          Index corporate knowledge bases from a folder and set the owning department,
+          Upload PDF documents to index them, then set the owning department,
           classification and explicit access for each document.
         </p>
       </div>
 
-      {/* Folder path */}
+      {/* PDF upload */}
+      <section className="rounded-card border border-line bg-surface p-6 shadow-card">
+        <h2 className="text-base font-semibold text-ink">Upload Documents</h2>
+        <p className="mt-1 text-sm text-ink-3">
+          PDF only, up to {MAX_UPLOAD_MB} MB each. Files are stored privately and indexed for search.
+          New documents start as Internal and need classification.
+        </p>
+
+        <label
+          htmlFor="pdf-upload"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            handleFiles(e.dataTransfer.files);
+          }}
+          className={`mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-control border-2 border-dashed px-6 py-8 text-center transition focus-within:ring-4 focus-within:ring-brand/25 ${
+            dragOver
+              ? "border-brand bg-brand-tint/40"
+              : "border-line-strong bg-surface-2 hover:border-brand/50"
+          } ${uploading ? "pointer-events-none opacity-70" : ""}`}
+        >
+          {uploading ? (
+            <RefreshIcon className="h-7 w-7 animate-spin text-brand-text" />
+          ) : (
+            <CloudUploadIcon className="h-7 w-7 text-brand-text" />
+          )}
+          <span className="text-sm font-semibold text-ink">
+            {uploading ? "Uploading..." : "Choose PDF files or drag them here"}
+          </span>
+          <span className="text-xs text-ink-3">You can select several files at once.</span>
+          <input
+            id="pdf-upload"
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            multiple
+            disabled={uploading}
+            onChange={(e) => handleFiles(e.target.files)}
+            className="sr-only"
+          />
+        </label>
+
+        {uploads.length > 0 && (
+          <ul className="mt-4 divide-y divide-line rounded-control border border-line" aria-live="polite">
+            {uploads.map((u) => (
+              <li key={u.id} className="flex items-start gap-3 px-4 py-3">
+                {u.state === "done" && <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
+                {u.state === "failed" && <AlertCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-danger" />}
+                {u.state === "uploading" && <RefreshIcon className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-ink-3" />}
+                {u.state === "waiting" && <FileIcon className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" />}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {u.name} <span className="font-normal text-ink-3">· {formatBytes(u.size)}</span>
+                  </p>
+                  <p className={`text-xs ${UPLOAD_TONE[u.state]}`}>
+                    {u.message || "Waiting..."}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Folder path (legacy, server-side folder scan) */}
+      {FEATURES.legacyFolderScan && (
       <section className="rounded-card border border-line bg-surface p-6 shadow-card">
         <form onSubmit={handlePathSubmit} noValidate>
           <label
@@ -358,6 +525,7 @@ export default function DocumentsManager() {
           )}
         </form>
       </section>
+      )}
 
       {/* Table */}
       <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
@@ -392,7 +560,7 @@ export default function DocumentsManager() {
                     colSpan={COLUMNS.length}
                     className="px-6 py-10 text-center text-sm text-ink-3"
                   >
-                    No documents yet. Submit a folder path to get started.
+                    No documents yet. Upload a PDF to get started.
                   </td>
                 </tr>
               )}
@@ -403,6 +571,17 @@ export default function DocumentsManager() {
                       <FileIcon className="h-4.5 w-4.5 shrink-0 text-danger" />
                       {d.title}
                     </div>
+                    {(d.pageCount || d.sizeBytes || d.status) && (
+                      <div className="mt-1 flex flex-wrap items-center gap-2 pl-7.5 text-xs text-ink-3">
+                        {d.pageCount ? <span>{d.pageCount} pages</span> : null}
+                        {d.sizeBytes ? <span>{formatBytes(d.sizeBytes)}</span> : null}
+                        {d.status && (
+                          <Badge tone={STATUS_TONE[d.status] ?? "neutral"}>
+                            {d.status.charAt(0).toUpperCase() + d.status.slice(1)}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                     {d.needsClassification && (
                       <span className="mt-1 inline-block rounded-full bg-warning-soft px-2 py-0.5 text-micro font-semibold uppercase tracking-wide text-warning">
                         Needs Classification

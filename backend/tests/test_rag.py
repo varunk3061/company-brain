@@ -37,7 +37,7 @@ def test_ask_uses_only_permitted_chunks_and_cites_them(client, make_user, monkey
     _, dev = make_user("dev@nexora.com", "IT", "DEVELOPER")
     seen = {}
 
-    def fake_retrieve(question, ctx, limit=5):
+    def fake_retrieve(question, ctx, limit=5, **kwargs):
         seen["ctx"] = ctx
         return [{"text": "Notice period is 30 days.", "source": "Policy.pdf", "page": 3, "document_uuid": "d1"}]
 

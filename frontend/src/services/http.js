@@ -25,7 +25,10 @@ function messageFrom(data, fallback) {
 export async function api(path, { method = "GET", body, auth = true } = {}) {
   const headers = {};
 
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  // FormData (file uploads) is sent as-is: the browser sets the multipart Content-Type and boundary.
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+
+  if (body !== undefined && !isForm) headers["Content-Type"] = "application/json";
 
   if (auth) {
     const token = getToken();
@@ -38,7 +41,7 @@ export async function api(path, { method = "GET", body, auth = true } = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
   });
 
   const data = await response.json().catch(() => ({}));
