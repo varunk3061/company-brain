@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Ban, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { ChevronDownIcon, SearchIcon, UserPlusIcon } from "../icons";
 import UserModal from "./UserModal";
 import Badge from "@/components/ui/Badge";
+import IconButton from "@/components/ui/IconButton";
 import DepartmentBadge from "@/components/ui/DepartmentBadge";
 import { displayName } from "@/lib/format";
 import { createUser, getUsers, updateUser, deleteUser } from "@/services/userService";
@@ -25,9 +27,6 @@ const COLUMNS = [
   "Status",
   "Actions",
 ];
-
-const linkBtn =
-  "rounded text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
 function normalizeUser(user) {
   return {
@@ -313,38 +312,32 @@ export default function UsersManager() {
                       </td>
 
                       <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-4">
+                        <div className="flex items-center justify-end gap-1">
                           {/* Edit employee */}
-                          <button
-                            type="button"
+                          <IconButton
+                            icon={Pencil}
+                            label={`Edit ${user.name}`}
+                            tone="brand"
                             onClick={() => setModal({ user })}
-                            className={`${linkBtn} text-brand-text hover:text-brand-text`}
-                          >
-                            Edit
-                          </button>
+                          />
 
                           {/* Revoke or restore employee access */}
-                          <button
-                            type="button"
+                          <IconButton
+                            icon={revoked ? RotateCcw : Ban}
+                            label={revoked ? `Restore access for ${user.name}` : `Revoke access for ${user.name}`}
+                            tone={revoked ? "success" : "danger"}
                             onClick={() => toggleAccess(user)}
-                            className={`${linkBtn} ${
-                              revoked
-                                ? "text-success hover:text-success"
-                                : "text-danger hover:text-danger"
-                            }`}
-                          >
-                            {revoked ? "Restore" : "Revoke"}
-                          </button>
+                          />
 
                           {/* Delete employee */}
-                          <button
-                            type="button"
+                          <IconButton
+                            icon={Trash2}
+                            label={deletingId === user.id ? "Deleting..." : `Delete ${user.name}`}
+                            tone="danger"
                             onClick={() => setDeleteTarget(user)}
                             disabled={deletingId === user.id}
-                            className={`${linkBtn} text-danger hover:text-danger disabled:opacity-50`}
-                          >
-                            {deletingId === user.id ? "Deleting..." : "Delete"}
-                          </button>
+                            busy={deletingId === user.id}
+                          />
                         </div>
                       </td>
                     </tr>

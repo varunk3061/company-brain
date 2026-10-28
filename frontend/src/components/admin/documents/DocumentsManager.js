@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink, Eye, Pencil, Search, Trash2, X } from "lucide-react";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -17,12 +18,15 @@ import {
   updateDocumentAccess,
   deleteDocument,
   uploadDocument,
+  getDocumentViewUrl,
 } from "@/services/documentService";
 import { FEATURES } from "@/config/features";
 import { getDepartments, getRoles } from "@/services/orgService";
 import { getUsers } from "@/services/userService";
 import Badge, { ClassificationBadge } from "@/components/ui/Badge";
-import { displayName } from "@/lib/format";
+import DepartmentBadge from "@/components/ui/DepartmentBadge";
+import IconButton from "@/components/ui/IconButton";
+import { displayName, formatDate } from "@/lib/format";
 
 const CLASSIFICATIONS = [
   { value: "public", label: "Public", hint: "Everyone" },
@@ -47,8 +51,21 @@ const COLUMNS = [
 const selectCls =
   "block w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/25";
 
-function Tag({ children }) {
-  return <Badge tone="brand">{children}</Badge>;
+const filterCls =
+  "block w-full rounded-control border border-line bg-surface-2 py-2.5 text-sm text-ink outline-none transition placeholder:text-ink-3 focus:border-brand focus:bg-surface focus:ring-4 focus:ring-brand/25";
+
+// Explicit grants shown as labelled groups (Departments / Roles / Users), one line each,
+// so long lists stay readable instead of one mixed pile of chips.
+function AccessGroup({ label, count, children }) {
+  if (!count) return null;
+  return (
+    <div className="flex items-start gap-3">
+      <dt className="w-20 shrink-0 pt-1 text-micro font-semibold uppercase tracking-wide text-ink-3">
+        {label} <span className="font-normal">({count})</span>
+      </dt>
+      <dd className="flex min-w-0 flex-1 flex-wrap gap-1.5">{children}</dd>
+    </div>
+  );
 }
 
 // Multi-select with removable chips. Options open inline so the modal's scroll area never clips them.
@@ -127,9 +144,6 @@ function MultiSelect({ label, options, value, onChange }) {
   );
 }
 
-const linkBtn =
-  "rounded text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand";
-
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 // 842113 -> "822 KB"
@@ -184,6 +198,19 @@ export default function DocumentsManager() {
   // Error message shown inside the delete modal
   const [deleteError, setDeleteError] = useState("");
 
+  // PDF preview modal: the document being previewed and its short-lived link.
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const previewRequest = useRef(0);
+
+  // Table filters
+  const [titleQuery, setTitleQuery] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [accessDeptFilter, setAccessDeptFilter] = useState("");
+
   // PDF uploads (files go to the backend, which stores them in the private bucket)
   const [uploads, setUploads] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -204,7 +231,7 @@ export default function DocumentsManager() {
           pageCount: d.page_count,
           sizeBytes: d.size_bytes,
           status: d.status,
-          updated: new Date(d.last_update).toLocaleDateString(),
+          lastUpdate: d.last_update,
         })),
       );
     } catch (err) {
@@ -222,6 +249,64 @@ export default function DocumentsManager() {
 
   const deptName = (code) =>
     departments.find((d) => d.code === code)?.name ?? code;
+
+  const filteredDocs = useMemo(() => {
+    const q = titleQuery.trim().toLowerCase();
+    return docs.filter(
+      (d) =>
+        (!q || (d.title ?? "").toLowerCase().includes(q)) &&
+        (!ownerFilter ||
+          (ownerFilter === "__none__" ? !d.departmentCode : d.departmentCode === ownerFilter)) &&
+        (!classFilter || d.classification === classFilter) &&
+        (!accessDeptFilter || (d.access?.departments ?? []).includes(accessDeptFilter)),
+    );
+  }, [docs, titleQuery, ownerFilter, classFilter, accessDeptFilter]);
+
+  const filtering = Boolean(titleQuery.trim() || ownerFilter || classFilter || accessDeptFilter);
+
+  const clearFilters = () => {
+    setTitleQuery("");
+    setOwnerFilter("");
+    setClassFilter("");
+    setAccessDeptFilter("");
+  };
+
+  // Ask the backend for a short-lived link to the stored PDF (it checks access), then show it in the modal.
+  const openPreview = async (doc) => {
+    const requestId = ++previewRequest.current;
+    setPreviewDoc(doc);
+    setPreviewUrl("");
+    setPreviewError("");
+    setPreviewLoading(true);
+
+    try {
+      const result = await getDocumentViewUrl(doc.id);
+      if (previewRequest.current === requestId) setPreviewUrl(result.url);
+    } catch (err) {
+      if (previewRequest.current === requestId)
+        setPreviewError(err.message || "Unable to load the document preview.");
+    } finally {
+      if (previewRequest.current === requestId) setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = useCallback(() => {
+    previewRequest.current += 1; // ignore any response still in flight
+    setPreviewDoc(null);
+    setPreviewUrl("");
+    setPreviewError("");
+    setPreviewLoading(false);
+  }, []);
+
+  // Escape closes the preview.
+  useEffect(() => {
+    if (!previewDoc) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") closePreview();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewDoc, closePreview]);
 
   // Open the delete confirmation modal
   const openDeleteModal = (doc) => {
@@ -534,8 +619,69 @@ export default function DocumentsManager() {
             Ingested Document Knowledge States
           </h2>
           <p className="shrink-0 text-sm text-ink-3">
-            Showing all {docs.length} documents
+            {filtering
+              ? `Showing ${filteredDocs.length} of ${docs.length} documents`
+              : `Showing all ${docs.length} documents`}
           </p>
+        </div>
+
+        {/* Filters */}
+        <div className="grid gap-3 px-6 pb-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" aria-hidden="true" />
+            <input
+              type="search"
+              value={titleQuery}
+              onChange={(e) => setTitleQuery(e.target.value)}
+              placeholder="Search by document title..."
+              aria-label="Filter by document title"
+              className={`${filterCls} pl-10 pr-4`}
+            />
+          </div>
+          <select
+            value={ownerFilter}
+            onChange={(e) => setOwnerFilter(e.target.value)}
+            aria-label="Filter by owner department"
+            className={`${filterCls} px-4`}
+          >
+            <option value="">All owner departments</option>
+            <option value="__none__">No owner department</option>
+            {departments.map((d) => (
+              <option key={d.code} value={d.code}>{d.name}</option>
+            ))}
+          </select>
+          <select
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            aria-label="Filter by classification"
+            className={`${filterCls} px-4`}
+          >
+            <option value="">All classifications</option>
+            {CLASSIFICATIONS.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <select
+            value={accessDeptFilter}
+            onChange={(e) => setAccessDeptFilter(e.target.value)}
+            aria-label="Filter by department with access"
+            className={`${filterCls} px-4`}
+          >
+            <option value="">All access departments</option>
+            {departments.map((d) => (
+              <option key={d.code} value={d.code}>{d.name}</option>
+            ))}
+          </select>
+          {filtering && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex items-center gap-1.5 justify-self-start rounded-control px-3 py-2 text-sm font-medium text-ink-3 transition hover:bg-surface-3 hover:text-ink"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+              Clear filters
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -564,12 +710,28 @@ export default function DocumentsManager() {
                   </td>
                 </tr>
               )}
-              {docs.map((d) => (
+              {docs.length > 0 && filteredDocs.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={COLUMNS.length}
+                    className="px-6 py-10 text-center text-sm text-ink-3"
+                  >
+                    No documents match these filters.
+                  </td>
+                </tr>
+              )}
+              {filteredDocs.map((d) => (
                 <tr key={d.id} className="transition hover:bg-surface-2/60">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3 text-sm font-medium text-ink">
                       <FileIcon className="h-4.5 w-4.5 shrink-0 text-danger" />
-                      {d.title}
+                      <span className="min-w-0 wrap-break-word">{d.title}</span>
+                      <IconButton
+                        icon={Eye}
+                        label={`Preview ${d.title}`}
+                        tone="brand"
+                        onClick={() => openPreview(d)}
+                      />
                     </div>
                     {(d.pageCount || d.sizeBytes || d.status) && (
                       <div className="mt-1 flex flex-wrap items-center gap-2 pl-7.5 text-xs text-ink-3">
@@ -594,47 +756,51 @@ export default function DocumentsManager() {
                   <td className="px-6 py-4">
                     <ClassificationBadge value={d.classification} />
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="min-w-80 px-6 py-4">
                     {(d.access?.departments?.length ?? 0) +
                       (d.access?.roles?.length ?? 0) +
                       (d.access?.users?.length ?? 0) >
                     0 ? (
-                      <div className="flex max-w-xs flex-wrap gap-1.5">
-                        {d.access.departments.map((c) => (
-                          <Tag key={`d-${c}`}>{deptName(c)}</Tag>
-                        ))}
-                        {d.access.roles.map((c) => (
-                          <Tag key={`r-${c}`}>
-                            {roles.find((r) => r.code === c)?.name ?? c}
-                          </Tag>
-                        ))}
-                        {d.access.users.map((u) => (
-                          <Tag key={`u-${u}`}>
-                            {displayName(users.find((x) => x.user_uuid === u)?.name) || "User"}
-                          </Tag>
-                        ))}
-                      </div>
+                      <dl className="max-w-sm space-y-2">
+                        <AccessGroup label="Depts" count={d.access.departments?.length}>
+                          {d.access.departments.map((c) => (
+                            <DepartmentBadge key={`d-${c}`} code={c}>{deptName(c)}</DepartmentBadge>
+                          ))}
+                        </AccessGroup>
+                        <AccessGroup label="Roles" count={d.access.roles?.length}>
+                          {d.access.roles.map((c) => (
+                            <Badge key={`r-${c}`} tone="neutral">
+                              {roles.find((r) => r.code === c)?.name ?? c}
+                            </Badge>
+                          ))}
+                        </AccessGroup>
+                        <AccessGroup label="Users" count={d.access.users?.length}>
+                          {d.access.users.map((u) => (
+                            <Badge key={`u-${u}`} tone="brand">
+                              {displayName(users.find((x) => x.user_uuid === u)?.name) || "User"}
+                            </Badge>
+                          ))}
+                        </AccessGroup>
+                      </dl>
                     ) : (
                       <span className="text-sm text-ink-3">No explicit grants</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-ink-3">{d.updated}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-ink-3">{formatDate(d.lastUpdate)}</td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-4">
-                      <button
-                        type="button"
+                    <div className="flex items-center justify-end gap-1">
+                      <IconButton
+                        icon={Pencil}
+                        label={`Edit access for ${d.title}`}
+                        tone="brand"
                         onClick={() => startEdit(d)}
-                        className={`${linkBtn} text-brand-text hover:text-brand-text`}
-                      >
-                        Edit access
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        label={`Delete ${d.title}`}
+                        tone="danger"
                         onClick={() => openDeleteModal(d)}
-                        className={`${linkBtn} text-danger hover:text-danger`}
-                      >
-                        Delete
-                      </button>
+                      />
                     </div>
                   </td>
                 </tr>
@@ -754,6 +920,72 @@ export default function DocumentsManager() {
               >
                 {saving ? "Saving..." : "Save"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Preview Modal */}
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4"
+          onClick={(e) => {
+            // Close only when the backdrop itself is clicked
+            if (e.target === e.currentTarget) closePreview();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preview-document-title"
+            className="flex h-full w-full max-w-5xl flex-col rounded-card bg-surface shadow-pop"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <FileIcon className="h-4.5 w-4.5 shrink-0 text-danger" />
+                <h2 id="preview-document-title" className="truncate text-base font-semibold text-ink">
+                  {previewDoc.title}
+                </h2>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {previewUrl && (
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Open in a new tab"
+                    title="Open in a new tab"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-control text-ink-3 transition hover:bg-surface-3 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  >
+                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  </a>
+                )}
+                <IconButton icon={X} label="Close preview" onClick={closePreview} />
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 p-3">
+              {previewLoading && (
+                <div className="flex h-full items-center justify-center gap-2 text-sm text-ink-3">
+                  <RefreshIcon className="h-4 w-4 animate-spin" />
+                  Loading preview...
+                </div>
+              )}
+              {!previewLoading && previewError && (
+                <div className="flex h-full items-center justify-center">
+                  <p role="alert" className="flex items-center gap-2 rounded-control bg-danger-soft px-4 py-3 text-sm text-danger">
+                    <AlertCircleIcon className="h-4 w-4 shrink-0" />
+                    {previewError}
+                  </p>
+                </div>
+              )}
+              {!previewLoading && !previewError && previewUrl && (
+                <iframe
+                  src={previewUrl}
+                  title={`Preview of ${previewDoc.title}`}
+                  className="h-full w-full rounded-control border border-line bg-surface-2"
+                />
+              )}
             </div>
           </div>
         </div>

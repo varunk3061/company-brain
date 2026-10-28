@@ -169,3 +169,21 @@ def test_audit_log_requires_permission_and_hides_payloads(client, make_user, adm
     assert data["items"][0]["actor_name"] == "Root Admin"
     assert "before" not in data["items"][0] and "after" not in data["items"][0]
     assert "password" not in body.text
+
+
+def test_audit_log_filters_by_action_and_actor(client, make_user, admin):
+    make_user("dev@nexora.com", "IT", "DEVELOPER")
+    data = client.get("/audit-logs", headers=admin).json()
+    assert "user.create" in data["actions"]
+
+    by_action = client.get("/audit-logs", params={"action": "user.create"}, headers=admin).json()
+    assert by_action["total"] >= 1
+    assert all(item["action"] == "user.create" for item in by_action["items"])
+
+    assert client.get("/audit-logs", params={"action": "role.create"}, headers=admin).json()["total"] == 0
+
+    by_actor = client.get("/audit-logs", params={"actor": "root ad"}, headers=admin).json()
+    assert by_actor["total"] >= 1
+    assert all(item["actor_name"] == "Root Admin" for item in by_actor["items"])
+
+    assert client.get("/audit-logs", params={"actor": "nobody-here"}, headers=admin).json()["total"] == 0

@@ -166,7 +166,7 @@ Heavy packages (LangChain, sentence-transformers, torch) are imported only when 
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/audit-logs?page&page_size` | Admin change history, newest first: time, actor name, action, target (before/after payloads are not exposed) |
+| GET | `/audit-logs?page&page_size&action&actor` | Admin change history, newest first: time, actor name, action, target (before/after payloads are not exposed). Optional filters: `action` = exact action (e.g. `user.create`); `actor` = part of the actor's name or email, case-insensitive (`system` also matches system actions). `total` counts filtered rows; `actions` lists every recorded action (for the UI dropdown) |
 
 ### Users (`users.manage`)
 

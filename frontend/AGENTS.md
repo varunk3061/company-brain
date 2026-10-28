@@ -31,7 +31,7 @@ See the [project AGENTS.md](../AGENTS.md) for architecture and the [backend AGEN
 | Framework | Next.js 16 (App Router) |
 | UI | React 19 with React Compiler |
 | Styling | Tailwind CSS v4 (via `@tailwindcss/turbopack`); every styling value comes from semantic tokens in `src/app/globals.css` |
-| Icons | Local SVG components (`components/*/icons.js`); `lucide-react` available |
+| Icons | Local SVG components (`components/*/icons.js`) and `lucide-react` (row actions, preview, filters, modal close) |
 | Font | Inter (`@fontsource-variable/inter`, imported in `layout.js`, family declared in `globals.css`) |
 | Language | JavaScript (ES modules); path alias `@/*` → `src/*` |
 | Lint | ESLint 9 + `eslint-config-next` |
@@ -97,9 +97,10 @@ src/
 │   ├── authService.js    login, current user
 │   ├── orgService.js     departments, roles
 │   ├── userService.js    users CRUD
-│   ├── documentService.js  scan, list, access, delete
+│   ├── documentService.js  upload, scan, list, access, delete, view URL (PDF preview)
+│   ├── auditService.js   audit log page + filters (action, actor)
 │   └── dashboardService.js
-└── lib/                      Framework-agnostic helpers (api base URL, utils)
+└── lib/                      Framework-agnostic helpers (api base URL, utils, format.js display formatters)
 ```
 
 ### Rules
@@ -157,11 +158,21 @@ Never use raw palette classes (`slate-*`, `indigo-*`, `red-*`, `white`, `black`�
 
 **Cursors.** One global rule gives every enabled button, link, select, checkbox, radio and `label[for]` a pointer and every disabled control `not-allowed`. Do not add `cursor-*` classes.
 
-**Capitalisation.** Title Case for page titles, nav items, buttons, column headers and badges; sentence case for helper text, placeholders, errors and empty states. Data is formatted on display with `lib/format.js` (`displayName`, `titleCase`, `actionLabel`).
+**Capitalisation.** Title Case for page titles, nav items, buttons, column headers and badges; sentence case for helper text, placeholders, errors and empty states. Data is formatted on display with `lib/format.js` (`displayName`, `titleCase`, `actionLabel`, `formatDate`, `formatTime`, `formatDateTime`).
+
+**Dates and times.** Always use the `lib/format.js` helpers, never `toLocaleString()`: `formatDate` → `28 Oct 2026`, `formatTime` → `08:08 PM`, `formatDateTime` → `28 Oct 2026, 08:08 PM` (viewer's local time zone). A timestamp without a zone (MongoDB returns naive UTC datetimes) is read as UTC. In tables, show the date with the time on a smaller second line (`whitespace-nowrap`) and the full value in `title`.
+
+**Row actions.** Table row actions are icon-only `IconButton`s (`components/ui/IconButton.js`) with a `lucide-react` icon; the required `label` is both the `aria-label` and the hover tooltip. Icons in use: `Pencil` edit / edit access, `Trash2` delete, `Ban` revoke access, `RotateCcw` restore access, `Eye` preview, `X` close.
+
+**Audit action colours.** `AuditLogs` maps each action to an existing `Badge` tone (no new colours): create → `success`, upload → `brand`, update → `info`, delete → `danger`, `document.access.update` → `warning`, `document.view` → `neutral`, `rag.ask` → `cat-2`. Add new actions to `ACTION_TONE` / `VERB_TONE` there.
+
+**Table filters.** Users: search by name or email + department. Documents: title search + owner department + classification + access department (client-side over the loaded list). Audit logs: actor search (debounced 300 ms) + action dropdown, filtered on the server (`/audit-logs?action=&actor=`) so pagination stays correct. Each filtered view has a "Clear filters" button and a "no matches" empty state.
+
+**Document preview.** The eye icon beside a document title opens a modal that asks the backend for a short-lived link (`getDocumentViewUrl` → `GET /api/documents/{uuid}/view-url`) and shows the PDF in an `<iframe>`, with an open-in-new-tab link and a close (X) button; Escape and a backdrop click also close it. The frontend never reads storage credentials — the backend checks access and presigns the R2 (Cloudflare) URL.
 
 **Unfinished features.** No fake data. Flags in `src/config/features.js` mark what is planned; while a flag is `false` the UI shows `ComingSoonBadge` / `ComingSoonNotice` (`components/ui/ComingSoon.js`) and disables the control. Turn a flag on only when the backend exists.
 
-Shared UI pieces: `components/ui/{Badge,DepartmentBadge,ComingSoon,ThemeSelect}.js`.
+Shared UI pieces: `components/ui/{Badge,DepartmentBadge,IconButton,ComingSoon,ThemeSelect}.js`.
 
 ## 6. UI & accessibility standards
 
@@ -204,6 +215,7 @@ Not set up yet. Recommended, in order of value:
 | `app/layout.js` | Root metadata still "Create Next App" |
 | `EmployeeChat` | Real profile, accessible documents and live question answering (`/api/rag/ask`, `FEATURES.questionAnswering = true`). Chat history is kept in memory only (lost on refresh) |
 | `admin/auditLogs` | Shows admin changes only; query history needs the retrieval service |
+| Document preview | Uses `can_view`, so an admin can only preview documents they may read (others show "Document not found."); documents registered without a stored file show the backend's "no stored file" message |
 | Auth | Tokens in Web Storage; Edit user modal cannot change email/password; theme preference is browser-only |
 | UI kit | Colours/shapes are tokenised, but screens still repeat button/card class strings; `ui/Button`, `Card` and `PageHeader` primitives are not extracted yet |
 | Lint | `react-hooks/set-state-in-effect` errors in `UsersManager` and `DocumentsManager` (data-loading effects) and one `window.location` warning in `ChatApp` pre-date this work |
