@@ -134,9 +134,25 @@ export function AssistantMessage({ message }) {
               Retrieved document citations (RAG engine)
             </h3>
             <div className="grid gap-3 sm:grid-cols-2">
-              {message.sources.map((s, i) => (
-                <CitationCard key={`${s.file}-${s.page}-${i}`} source={s} />
-              ))}
+              {message.sources.map((s, i) => {
+                const docName = s.file || s.source || s.fileName || "Unknown document";
+                return (
+                  <div
+                    key={`${docName}-${s.page}-${i}`}
+                    className="flex items-center gap-3 rounded-control border border-line bg-surface-2 px-4 py-3 transition hover:border-brand/30 hover:bg-brand-tint/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-danger-soft text-danger">
+                      <FileIcon className="h-4.5 w-4.5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-ink">{docName}</span>
+                      <span className="block text-xs text-ink-3">
+                        Page {s.page ?? "Unknown"}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

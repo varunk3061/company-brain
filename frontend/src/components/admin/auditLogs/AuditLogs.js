@@ -88,7 +88,7 @@ export default function AuditLogs() {
                   <td className="px-6 py-4">
                     <Badge tone="brand">{actionLabel(row.action)}</Badge>
                   </td>
-                  <td className="max-w-xs truncate px-6 py-4 text-sm text-ink-2">{row.target}</td>
+                  <td className="max-w-xs truncate px-6 py-4 text-sm text-ink-2" title={row.target}>{row.target}</td>
                 </tr>
               ))}
             </tbody>

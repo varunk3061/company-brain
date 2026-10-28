@@ -14,3 +14,4 @@ sentence-transformers
 pypdf
 neo4j
 boto3
+langchain-openai

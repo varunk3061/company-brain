@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from models.rag_model import AskQuestionRequest
 from services import audit_service
+from services import chat_service
 from services.access.policy import UserContext
 from services.llm_service import generate_answer
 from services.retrieval_service import retrieve_relevant_chunks
@@ -23,11 +24,11 @@ def ask_question(request: AskQuestionRequest, ctx: UserContext = Depends(get_cur
     if not question:
         raise HTTPException(status_code=422, detail="Question cannot be empty.")
 
-    chunks = retrieve_relevant_chunks(question=question, ctx=ctx, limit=10,max_per_document=4)
+    chunks = retrieve_relevant_chunks(question=question, ctx=ctx, limit=10)
 
     # Same text for "nothing exists" and "nothing you may see": a refusal must not reveal which it is.
     if not chunks:
-        audit_service.record(ctx, "rag.ask", "query", after={"question": question, "chunks": 0})
+        audit_service.record(ctx, "rag.ask", question, after={"question": question, "chunks": 0})
         return {"answer": NO_ANSWER, "sources": []}
 
     context = "\n\n---\n\n".join(
@@ -50,8 +51,22 @@ def ask_question(request: AskQuestionRequest, ctx: UserContext = Depends(get_cur
     }.values())
 
     audit_service.record(
-        ctx, "rag.ask", "query",
+        ctx, "rag.ask", question,
         after={"question": question, "chunks": len(chunks), "documents": sorted({s["document_uuid"] for s in sources})},
     )
 
-    return {"answer": answer, "sources": sources}
+    # return {"answer": answer, "sources": sources}
+
+    conv_id, num = chat_service.save_chat_turn(
+        user_uuid=ctx.user_uuid,
+        conversation_id=request.conversation_id,
+        question=question,
+        answer=answer,
+        sources=sources
+    )
+    return {
+        "answer": answer,
+        "sources": sources,
+        "conversation_id": conv_id,
+        "num": num
+    }
