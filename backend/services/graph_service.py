@@ -17,6 +17,73 @@ ENTITY_FULLTEXT_INDEX = "entity_key_fulltext"
 # A topic is detected when one or more of its keywords
 # appears in the document's chunk text.
 TOPIC_RULES = [
+    # --- Business topics (sales, projects, product, legal, company) ---
+    {
+        "name": "Sales and Discounts",
+        "keywords": [
+            "discount", "sales playbook", "pricing",
+            "deal approval", "list price", "price list",
+        ],
+        "description": "Sales process, pricing, and discount approval rules.",
+    },
+    {
+        "name": "Pipeline and Forecast",
+        "keywords": [
+            "pipeline", "forecast", "quota",
+            "win rate", "bookings", "deal stage",
+        ],
+        "description": "Sales pipeline, bookings, and forecast reviews.",
+    },
+    {
+        "name": "Key Accounts and Clients",
+        "keywords": [
+            "key account", "account plan", "renewal",
+            "account manager", "relationship manager", "customer account",
+        ],
+        "description": "Major client accounts, renewals, and account plans.",
+    },
+    {
+        "name": "Project Status",
+        "keywords": [
+            "status report", "project status", "milestone",
+            "rag status", "go-live", "sprint",
+        ],
+        "description": "Project progress, milestones, risks, and delivery status.",
+    },
+    {
+        "name": "Product Roadmap",
+        "keywords": [
+            "roadmap", "release plan", "product release",
+            "feature launch", "h2 fy27",
+        ],
+        "description": "Planned product releases and feature roadmap.",
+    },
+    {
+        "name": "Contracts and Vendors",
+        "keywords": [
+            "vendor", "master services agreement", "master service agreement",
+            "service level agreement", "statement of work",
+            "contract term", "indemnif",
+        ],
+        "description": "Client and vendor contracts, MSAs, and SLAs.",
+    },
+    {
+        "name": "Litigation and Disputes",
+        "keywords": [
+            "dispute", "litigation", "lawsuit",
+            "arbitration", "settlement", "legal claim",
+        ],
+        "description": "Legal disputes, claims, and litigation status.",
+    },
+    {
+        "name": "Company Overview",
+        "keywords": [
+            "fact sheet", "company overview", "headquarters",
+            "founded in", "subscription plan", "pricing plan",
+        ],
+        "description": "Company profile, offerings, and plans.",
+    },
+    # --- HR policy topics (kept for HR documents uploaded later) ---
     {
         "name": "Employee Leave",
         "keywords": [
