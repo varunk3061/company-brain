@@ -1,8 +1,6 @@
 import os
 import hashlib
 import logging
-import traceback
-
 
 from typing import Union
 from uuid import uuid4
@@ -72,7 +70,7 @@ def validate_document_path(file_path: str) -> Path:
     if not path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Document file not found: {path}",
+            detail="The document file was not found on the server.",
         )
 
     if not path.is_file():
@@ -135,22 +133,25 @@ def sync_document_graph(document: dict, chunks: list) -> dict:
             "graph_sync_status": "indexed",
         }
 
-    except Exception as exc:
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Graph sync failed for %s", document["document_uuid"])
+
+        # Neo4j error text can contain query and host details: it stays in the log.
+        error = "Graph sync failed. Check the backend logs."
 
         documents_collection.update_one(
             {"document_uuid": document["document_uuid"]},
             {
                 "$set": {
                     "graph_sync_status": "failed",
-                    "graph_sync_error": str(exc),
+                    "graph_sync_error": error,
                 }
             },
         )
 
         return {
             "graph_sync_status": "failed",
-            "graph_sync_error": str(exc),
+            "graph_sync_error": error,
         }
 
 #-------------------------------------------------------------------------------------------------------------
@@ -352,8 +353,8 @@ def ingest_document(document: Union[dict, str]):
         raise
 
     except Exception as exc:
-        traceback.print_exc()  # full detail stays in the backend logs
-        _mark_failed(document_uuid, exc)
+        logger.exception("Ingestion failed for %s", document_uuid)  # full detail stays in the backend logs
+        _mark_failed(document_uuid, "Document ingestion failed.")
 
         raise HTTPException(
             status_code=500,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { getMyProfile } from "@/services/authService";
 import { getDocuments } from "@/services/documentService";
@@ -58,6 +59,7 @@ async function askBrain(query, conversationId = null) {
 }
 
 export default function ChatApp() {
+  const router = useRouter();
   const [conversations, setConversations] = useState([]);
 
   const [activeId, setActiveId] = useState(null);
@@ -366,7 +368,7 @@ export default function ChatApp() {
   const handleConfirmSignOut = () => {
     clearSession();
 
-    window.location.href = "/login";
+    router.push("/login");
   };
 
   // Open the delete query confirmation modal

@@ -220,5 +220,4 @@ Not set up yet. Recommended, in order of value:
 | Document preview | Uses `can_view`, so an admin can only preview documents they may read (others show "Document not found."); documents registered without a stored file show the backend's "no stored file" message |
 | Auth | Tokens in Web Storage; Edit user modal cannot change email/password; theme preference is browser-only |
 | UI kit | Colours/shapes are tokenised, but screens still repeat button/card class strings; `ui/Button`, `Card` and `PageHeader` primitives are not extracted yet |
-| Lint | `react-hooks/set-state-in-effect` errors in `UsersManager` and `DocumentsManager` (data-loading effects) and one `window.location` warning in `ChatApp` pre-date this work |
 | Tests | None |

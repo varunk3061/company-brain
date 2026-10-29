@@ -160,10 +160,11 @@ def scan_pdf_folder(folder_path: str):
                 "reason": "Already registered"
             })
 
-        except (OSError, PermissionError) as exc:
+        except (OSError, PermissionError):
+            logger.exception("Could not register %s", pdf_path)
             errors.append({
                 "document_name": pdf_path.name,
-                "reason": str(exc)
+                "reason": "File could not be read."
             })
 
     return {
@@ -261,8 +262,8 @@ def update_document_access(document_uuid: str, data: DocumentAccessUpdate, actor
             after["classification"],
             after["access"]
         )
-    except Exception as exc:
-        print(f"Graph access update failed for {document_uuid} : exc")
+    except Exception:
+        logger.exception("Graph access update failed for %s", document_uuid)
 
     doc_name = before.get("document_name") or document_uuid
     audit_service.record(
@@ -297,8 +298,8 @@ def delete_document(document_uuid: str, actor: UserContext):
     # Keep Neo4j in step with MongoDB. A graph error must not block the delete
     try : 
         delete_document_from_graph(document_uuid)
-    except Exception as exc:
-        print(f"Graph delete failed for {document_uuid} : {exc}")
+    except Exception:
+        logger.exception("Graph delete failed for %s; Neo4j data for it is orphaned", document_uuid)
 
     doc_name = doc.get("document_name") or document_uuid
     audit_service.record(actor, "document.delete", doc_name, before={"document_name": doc_name})
@@ -346,9 +347,11 @@ def scan_and_ingest_pdf_folder(folder_path: str):
             })
 
         except Exception as exc:
+            # HTTPException details are written for the client; anything else stays in the log.
+            logger.exception("Ingestion failed for %s", pdf_path)
             ingestion_errors.append({
                 "document_name": pdf_path.name,
-                "reason": getattr(exc, "detail", None) or str(exc),
+                "reason": getattr(exc, "detail", None) or "Ingestion failed. Check the backend logs.",
                 "error_type": type(exc).__name__,
             })
 

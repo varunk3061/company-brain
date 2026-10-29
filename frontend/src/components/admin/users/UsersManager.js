@@ -63,24 +63,19 @@ export default function UsersManager() {
   const [deletingId, setDeletingId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const loadEmployees = useCallback(async () => {
-    setPageError("");
-
-    try {
-      const [result, departmentList, roleList] = await Promise.all([
-        getUsers(),
-        getDepartments(),
-        getRoles(),
-      ]);
-      setUsers(result.items.map(normalizeUser));
-      setDepartments(departmentList.filter((d) => d.status === "active"));
-      setRoles(roleList.filter((r) => r.status === "active"));
-    } catch (error) {
-      setPageError(error.message || "Unable to load users.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadEmployees = useCallback(
+    () =>
+      Promise.all([getUsers(), getDepartments(), getRoles()])
+        .then(([result, departmentList, roleList]) => {
+          setPageError("");
+          setUsers(result.items.map(normalizeUser));
+          setDepartments(departmentList.filter((d) => d.status === "active"));
+          setRoles(roleList.filter((r) => r.status === "active"));
+        })
+        .catch((error) => setPageError(error.message || "Unable to load users."))
+        .finally(() => setLoading(false)),
+    [],
+  );
 
   useEffect(() => {
     loadEmployees();

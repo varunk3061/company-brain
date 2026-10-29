@@ -47,6 +47,16 @@ def get_user_conversations(user_uuid:str):
 
 #---------------------------------------------------------------------------------------------------
 
+def conversation_belongs_to(conversation_id: str, user_uuid: str) -> bool:
+
+    """True if the conversation exists and is owned by this user."""
+
+    return chat_conversations_collection.count_documents(
+        {"conversation_id": conversation_id, "user_uuid": user_uuid}, limit=1
+    ) > 0
+
+#---------------------------------------------------------------------------------------------------
+
 def get_conversation_by_uuid(conversation_id: str, user_uuid: str):
 
     """Get a conversation only if it belongs to the authenticated user."""

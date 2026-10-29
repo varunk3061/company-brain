@@ -4,11 +4,14 @@ from database.connection import departments_collection, users_collection
 from models.user_model import LoginRequest, LoginResponse, SessionUser
 from services.access.policy import UserContext
 from utils.auth import build_user_context, create_access_token, get_current_user
-from utils.security import ACCESS_TOKEN_EXPIRE_MINUTES, verify_password
+from utils.security import ACCESS_TOKEN_EXPIRE_MINUTES, hash_password, verify_password
 
 #-------------------------------------------------------------------------------------
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+# Checked when the email is unknown, so that case costs the same bcrypt time as a wrong password.
+DUMMY_HASH = hash_password("timing-equalisation-only")
 
 
 def _session_user(ctx: UserContext) -> SessionUser:
@@ -33,8 +36,11 @@ def login(login_data: LoginRequest):
 
     user = users_collection.find_one({"email": email})
 
-    # Same error for unknown email and wrong password: no user enumeration.
-    if not user or not verify_password(password, user["password_hash"]):
+    # Same error and same bcrypt cost for unknown email and wrong password: no user enumeration.
+    stored_hash = (user or {}).get("password_hash") or DUMMY_HASH
+    password_ok = verify_password(password, stored_hash)
+
+    if not user or not user.get("password_hash") or not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

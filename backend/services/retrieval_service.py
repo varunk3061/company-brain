@@ -471,10 +471,7 @@ def retrieve_relevant_chunks(
 
         except Exception as graph_exc:
             # Neo4j is an enhancement, not a requirement for basic RAG.
-            print(
-                "Graph-assisted retrieval unavailable: "
-                f"{type(graph_exc).__name__}: {graph_exc}"
-            )
+            logger.warning("Graph-assisted retrieval unavailable: %s: %s", type(graph_exc).__name__, graph_exc)
             graph_chunks = []
 
         # 3b. Entity graph: chunks mentioning entities named in the question.
@@ -492,10 +489,7 @@ def retrieve_relevant_chunks(
 
         except Exception as entity_exc:
             # The entity graph is an enhancement, not a requirement for basic RAG.
-            print(
-                "Entity-graph retrieval unavailable: "
-                f"{type(entity_exc).__name__}: {entity_exc}"
-            )
+            logger.warning("Entity-graph retrieval unavailable: %s: %s", type(entity_exc).__name__, entity_exc)
             entity_chunks = []
 
         # 4. Combine vector, topic-graph and entity-graph candidates.
@@ -534,10 +528,7 @@ def retrieve_relevant_chunks(
         raise
 
     except Exception as exc:
-        print(
-            "Document retrieval error: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        logger.exception("Document retrieval error")
 
         raise HTTPException(
             status_code=500,

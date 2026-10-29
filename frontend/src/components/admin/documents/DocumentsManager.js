@@ -220,27 +220,28 @@ export default function DocumentsManager() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
-  const loadDocuments = useCallback(async () => {
-    try {
-      const result = await getDocuments();
-      setDocs(
-        result.map((d) => ({
-          id: d.document_uuid,
-          title: d.document_name,
-          departmentCode: d.department_code,
-          classification: d.classification,
-          access: d.access,
-          needsClassification: d.needs_classification,
-          pageCount: d.page_count,
-          sizeBytes: d.size_bytes,
-          status: d.status,
-          lastUpdate: d.last_update,
-        })),
-      );
-    } catch (err) {
-      setPathError(err.message || "Failed to load documents.");
-    }
-  }, []);
+  const loadDocuments = useCallback(
+    () =>
+      getDocuments()
+        .then((result) =>
+          setDocs(
+            result.map((d) => ({
+              id: d.document_uuid,
+              title: d.document_name,
+              departmentCode: d.department_code,
+              classification: d.classification,
+              access: d.access,
+              needsClassification: d.needs_classification,
+              pageCount: d.page_count,
+              sizeBytes: d.size_bytes,
+              status: d.status,
+              lastUpdate: d.last_update,
+            })),
+          ),
+        )
+        .catch((err) => setPathError(err.message || "Failed to load documents.")),
+    [],
+  );
 
   useEffect(() => {
     loadDocuments();

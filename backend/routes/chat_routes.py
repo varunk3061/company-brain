@@ -50,7 +50,7 @@ def delete_conversation(conversation_id:str, ctx:UserContext = Depends(get_curre
 
     if not success:
          raise HTTPException(
-              status_code=400,
+              status_code=404,
               detail="Conversation not found"
          )
 

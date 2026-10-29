@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 
@@ -36,6 +37,9 @@ from utils.security import hash_password
 
 #------------------------------------------------------------------------------------------------
 
+# Uvicorn's logger, so startup messages are shown without extra logging setup.
+logger = logging.getLogger("uvicorn.error")
+
 ADMIN_ROLE = "SYSTEM_ADMIN"
 ADMIN_DEPARTMENT = "EXEC"
 
@@ -49,7 +53,7 @@ def create_initial_admin():
 
     if admins_collection.count_documents({}) > 0:
         # Existing install that has not been migrated: don't create a second admin identity.
-        print("Legacy admins found. Run `python -m scripts.migrate_users --apply` to move them to `users`.")
+        logger.warning("Legacy admins found. Run `python -m scripts.migrate_users --apply` to move them to `users`.")
         return
 
     admin_name = os.getenv("ADMIN_NAME")
@@ -82,7 +86,7 @@ def create_initial_admin():
         "updated_at": now,
     })
 
-    print("Initial admin created successfully.")
+    logger.info("Initial admin created successfully.")
 
 #------------------------------------------------------------------------------------------------
 
@@ -95,9 +99,9 @@ async def lifespan(app: FastAPI):
     try:
         verify_neo4j_connection()
         initialize_graph()
-        print("Neo4j connected and graph constraints initialized.")
-    except Exception as error:
-        print(f"Neo4j initialization failed: {error}")
+        logger.info("Neo4j connected and graph constraints initialized.")
+    except Exception:
+        logger.exception("Neo4j initialization failed")
         raise
 
     try:

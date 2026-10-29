@@ -42,6 +42,12 @@ def ask_question(request: AskQuestionRequest, ctx: UserContext = Depends(get_cur
     if not question:
         raise HTTPException(status_code=422, detail="Question cannot be empty.")
 
+    # Checked up front so a foreign or unknown conversation costs no retrieval or LLM call.
+    if request.conversation_id is not None and not chat_service.conversation_belongs_to(
+        request.conversation_id, ctx.user_uuid
+    ):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
     # Router: entities named in the question decide whether the graph paths run.
     plan = plan_retrieval(question)
 
