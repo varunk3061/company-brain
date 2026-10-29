@@ -5,7 +5,7 @@ from services import audit_service
 from services import chat_service
 from services import rerank_service
 from services.access.policy import UserContext
-from services.llm_service import generate_answer
+from services.llm_service import generate_answer, is_abstention
 from services.retrieval_service import plan_retrieval, retrieve_graph_facts, retrieve_relevant_chunks
 from utils.auth import get_current_user
 
@@ -92,9 +92,11 @@ def ask_question(request: AskQuestionRequest, ctx: UserContext = Depends(get_cur
     context = "\n\n---\n\n".join(context_parts)
 
     answer = generate_answer(question=question, context=context)
+    abstained = is_abstention(answer)
 
     # One entry per (document, page) actually retrieved: chunks first, then fact evidence.
-    sources = list({
+    # An answer that declines to answer cites nothing: the documents did not support it.
+    sources = [] if abstained else list({
         (c.get("document_uuid"), c.get("page")): {
             "source": c.get("source", "Unknown document"),
             "page": c.get("page"),
@@ -110,6 +112,8 @@ def ask_question(request: AskQuestionRequest, ctx: UserContext = Depends(get_cur
         "graph_facts": len(facts),
         "documents": sorted({s["document_uuid"] for s in sources if s["document_uuid"]}),
     }
+    if abstained:
+        audit_after["abstained"] = "llm"
     if rerank_details:
         audit_after["rerank"] = rerank_details
 

@@ -33,6 +33,7 @@ export async function api(path, { method = "GET", body, auth = true } = {}) {
   if (auth) {
     const token = getToken();
     if (!token) {
+      if (typeof window !== "undefined") window.location.replace("/login");
       throw new Error("NOT_AUTHENTICATED");
     }
     headers.Authorization = `Bearer ${token}`;

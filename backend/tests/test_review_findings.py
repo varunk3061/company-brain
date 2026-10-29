@@ -255,3 +255,35 @@ def test_graph_access_update_failure_logs_the_real_error(client, admin, monkeypa
 def test_system_prompt_marks_retrieved_context_as_untrusted_data():
     prompt = llm_service.SYSTEM_PROMPT.lower()
     assert "untrusted" in prompt or "ignore any instructions" in prompt
+
+
+# ---- an abstaining answer must not cite documents ---------------------------------------------
+
+def test_abstaining_answer_returns_no_sources_and_is_audited(client, make_user, monkeypatch):
+    _, dev = make_user("dev@nexora.com", "IT", "DEVELOPER")
+    stub_answering(monkeypatch)
+    monkeypatch.setattr("routes.rag_routes.generate_answer",
+                        lambda question, context: "I could not find sufficient information in the accessible documents.")
+
+    r = ask(client, dev)
+    assert r.status_code == 200 and r.json()["sources"] == []
+
+    saved = chat_conversations_collection.find_one({"conversation_id": r.json()["conversation_id"]})
+    assert saved["messages"][1]["sources"] == []
+    assert audit_log_collection.find_one({"action": "rag.ask"})["after"]["abstained"] == "llm"
+
+
+def test_real_answer_still_cites_its_sources(client, make_user, monkeypatch):
+    _, dev = make_user("dev@nexora.com", "IT", "DEVELOPER")
+    stub_answering(monkeypatch)
+    assert ask(client, dev).json()["sources"] == [{"source": "Policy.pdf", "page": 1, "document_uuid": "d1"}]
+
+
+@pytest.mark.parametrize("answer,expected", [
+    ("I could not find sufficient information in the accessible documents.", True),
+    ("  i could not find sufficient information to answer", True),
+    ("The notice period is 30 days. I could not find sufficient information on bonuses.", False),
+    ("", False),
+])
+def test_is_abstention(answer, expected):
+    assert llm_service.is_abstention(answer) is expected

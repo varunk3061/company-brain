@@ -21,6 +21,15 @@ NVIDIA_BASE_URL = os.getenv(
     "https://integrate.api.nvidia.com/v1",
 )
 
+# The system prompt tells the model to start its refusal with this text.
+ABSTAIN_PREFIX = "I could not find sufficient information"
+
+
+def is_abstention(answer: str) -> bool:
+    """True when the model declined to answer, so the retrieved documents must not be cited as support."""
+    return (answer or "").strip().lower().startswith(ABSTAIN_PREFIX.lower())
+
+
 SYSTEM_PROMPT = """
 You are Company Brain, an internal company document assistant.
 
