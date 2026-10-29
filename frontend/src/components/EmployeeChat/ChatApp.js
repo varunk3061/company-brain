@@ -12,7 +12,12 @@ import { displayName, titleCase } from "@/lib/format";
 import ThemeSelect from "@/components/ui/ThemeSelect";
 import { ClassificationBadge } from "@/components/ui/Badge";
 import { ComingSoonNotice } from "@/components/ui/ComingSoon";
-import { getConversations, getConversation } from "@/services/chatService";
+import {
+  getConversations,
+  getConversation,
+  deleteConversation,
+} from "@/services/chatService";
+import { Trash2 } from "lucide-react";
 
 import Sidebar from "./Sidebar";
 import { AssistantMessage, TypingMessage, UserMessage } from "./Message";
@@ -64,6 +69,8 @@ export default function ChatApp() {
 
   // Control the sign-out confirmation modal
   const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Logged-in employee profile from FastAPI.
   const [employee, setEmployee] = useState(null);
@@ -362,6 +369,54 @@ export default function ChatApp() {
     window.location.href = "/login";
   };
 
+  // Open the delete query confirmation modal
+  const handleRequestDelete = (conversation) => {
+    setConversationToDelete(conversation);
+  };
+
+  // Cancel query deletion and close modal
+  const handleCancelDelete = () => {
+    if (!isDeleting) {
+      setConversationToDelete(null);
+    }
+  };
+
+  // Confirm delete query
+  const handleConfirmDelete = async () => {
+    if (!conversationToDelete || isDeleting) return;
+
+    const targetId =
+      conversationToDelete.id ||
+      conversationToDelete._id ||
+      conversationToDelete.conversation_id;
+
+    setIsDeleting(true);
+
+    try {
+      await deleteConversation(targetId);
+
+      setConversations((previous) =>
+        previous.filter(
+          (conversation) =>
+            conversation.id !== targetId &&
+            conversation._id !== targetId &&
+            conversation.conversation_id !== targetId,
+        ),
+      );
+
+      if (activeId === targetId) {
+        setActiveId(null);
+        setInput("");
+      }
+
+      setConversationToDelete(null);
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   //-------------------------------------------------------------------------------------------------------------------------------------------
 
   return (
@@ -468,6 +523,7 @@ export default function ChatApp() {
           activeId={activeId}
           onSelect={handleSelect}
           onNew={handleNew}
+          onDelete={handleRequestDelete}
           profile={employee}
           documentCount={documents ? documents.length : undefined}
           open={sidebarOpen}
@@ -708,6 +764,66 @@ export default function ChatApp() {
               >
                 <LogOutIcon className="h-4 w-4" />
                 Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Query Confirmation Modal */}
+      {conversationToDelete && (
+        <div
+          className="fixed inset-0 z-100 flex items-center justify-center bg-overlay px-4 backdrop-blur-sm"
+          onClick={handleCancelDelete}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-query-modal-title"
+            className="w-full max-w-md rounded-card border border-line bg-surface p-6 shadow-pop"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {/* Modal Icon */}
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-danger-soft">
+              <Trash2 className="h-7 w-7 text-danger" />
+            </div>
+
+            {/* Modal Heading */}
+            <h2
+              id="delete-query-modal-title"
+              className="mt-4 text-center text-xl font-semibold text-ink"
+            >
+              Delete query?
+            </h2>
+
+            {/* Modal Description */}
+            <p className="mt-2 text-center text-sm leading-6 text-ink-3">
+              Are you sure you want to delete &ldquo;
+              <span className="font-medium text-ink">
+                {conversationToDelete.title}
+              </span>
+              &rdquo;? This action cannot be undone.
+            </p>
+
+            {/* Modal Actions */}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleCancelDelete}
+                disabled={isDeleting}
+                className="rounded-control border border-line px-5 py-2.5 text-sm font-medium text-ink-2 transition hover:bg-surface-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-line-strong disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="flex items-center gap-2 rounded-control bg-danger px-5 py-2.5 text-sm font-medium text-on-danger shadow-card transition hover:bg-danger-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeleting ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { GlobeIcon, PlusIcon } from "./icons";
 import { ComingSoonBadge } from "@/components/ui/ComingSoon";
 import { FEATURES } from "@/config/features";
@@ -10,6 +11,7 @@ export default function Sidebar({
   activeId,
   onSelect,
   onNew,
+  onDelete,
   profile,
   documentCount,
   open,
@@ -62,21 +64,40 @@ export default function Sidebar({
         ) : (
           <ul className="space-y-1">
             {conversations.map((c) => {
-              const isActive = c.id === activeId;
+              const convId = c.id || c._id;
+              const isActive = convId === activeId;
               return (
-                <li key={c.id}>
+                <li key={convId} className="group relative flex items-center">
                   <button
                     type="button"
-                    onClick={() => onSelect(c.id)}
+                    onClick={() => onSelect(convId)}
                     aria-current={isActive ? "true" : undefined}
-                    className={`w-full rounded-control px-3 py-2.5 text-left text-sm leading-snug transition ${
+                    className={`w-full rounded-control py-2.5 pl-3 pr-9 text-left text-sm leading-snug transition ${
                       isActive
                         ? "bg-brand-tint font-medium text-brand-text"
                         : "text-ink-2 hover:bg-surface-2 hover:text-ink"
                     }`}
                   >
-                    {c.title}
+                    <span className="block truncate">{c.title}</span>
                   </button>
+                  {onDelete && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(c);
+                      }}
+                      aria-label={`Delete ${c.title}`}
+                      title="Delete query"
+                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1.5 text-ink-3 transition hover:bg-danger-soft hover:text-danger focus:opacity-100 ${
+                        isActive
+                          ? "opacity-70 hover:opacity-100"
+                          : "opacity-0 group-hover:opacity-100"
+                      }`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </li>
               );
             })}
