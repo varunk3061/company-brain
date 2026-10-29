@@ -410,7 +410,7 @@ def retrieve_relevant_chunks(
     question: str,
     ctx: UserContext,
     limit: int = 10,
-    max_per_document: int = 4,
+    max_per_document: int = 3,
     plan: RetrievalPlan | None = None,
 ) -> list:
     """

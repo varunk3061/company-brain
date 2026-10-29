@@ -45,7 +45,8 @@ def ask_question(request: AskQuestionRequest, ctx: UserContext = Depends(get_cur
     # Router: entities named in the question decide whether the graph paths run.
     plan = plan_retrieval(question)
 
-    chunks = retrieve_relevant_chunks(question=question, ctx=ctx, limit=10, plan=plan)
+    # At most 3 chunks per document, so multi-document questions (impact, dependencies) get a wider mix of sources.
+    chunks = retrieve_relevant_chunks(question=question, ctx=ctx, limit=10, max_per_document=3, plan=plan)
     facts = retrieve_graph_facts(plan, ctx)
 
     # Same text for "nothing exists" and "nothing you may see": a refusal must not reveal which it is.

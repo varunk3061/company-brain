@@ -75,7 +75,7 @@ export default function Sidebar({
                         : "text-ink-2 hover:bg-surface-2 hover:text-ink"
                     }`}
                   >
-                    Q{c.num}: {c.title}
+                    {c.title}
                   </button>
                 </li>
               );

@@ -129,7 +129,8 @@ def test_retrieval_reranks_a_wide_pool_and_returns_top_n(client, local_reranker)
 
     assert calls[0]["candidate_limit"] == rerank_service.RERANK_CANDIDATES
     assert len(scorer.seen) == 50
-    assert [c["chunk_uuid"] for c in result] == [f"c{i}" for i in range(49, 43, -1)]  # top 6 by rerank
+    top_n = rerank_service.RERANK_TOP_N
+    assert [c["chunk_uuid"] for c in result] == [f"c{i}" for i in range(49, 49 - top_n, -1)]  # top N by rerank
     assert all("rerank_score" in c for c in result)
 
 
@@ -143,7 +144,7 @@ def test_retrieval_still_caps_chunks_per_document_after_rerank(client, local_rer
 
     result = retrieval_service.retrieve_relevant_chunks("q", DEV, limit=10)
 
-    assert sum(c["document_uuid"] == "same-doc" for c in result) == 4
+    assert sum(c["document_uuid"] == "same-doc" for c in result) == 3
 
 
 def test_reranker_failure_keeps_the_original_selection(client, local_reranker):

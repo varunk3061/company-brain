@@ -27,7 +27,7 @@ RERANK_PROVIDER = os.getenv("RERANK_PROVIDER", "local").strip().lower()
 
 # How many retrieved candidates are scored, and how many reach the LLM.
 RERANK_CANDIDATES = int(os.getenv("RERANK_CANDIDATES", "50"))
-RERANK_TOP_N = int(os.getenv("RERANK_TOP_N", "6"))
+RERANK_TOP_N = int(os.getenv("RERANK_TOP_N", "10"))
 
 # Abstain when the best chunk scores below this. Tune with `python -m scripts.tune_rerank`.
 RERANK_MIN_SCORE = float(os.getenv("RERANK_MIN_SCORE", "0.02"))

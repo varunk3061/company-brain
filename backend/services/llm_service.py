@@ -42,8 +42,14 @@ Follow these rules strictly:
    - If details are missing, state:
      "The provided documents do not specify the exact conditions."
 
-3. Boundaries & Disambiguation:
-   - Do not combine unrelated topics unless directly requested.
+3. Boundaries, Synthesis & Disambiguation:
+   - Do not add topics the question does not relate to.
+   - When the question asks about the impact, consequences or dependencies
+     of an event (a delay, a missed date, a failure), combine every
+     retrieved document that bears on that event: who or what is affected,
+     who is explicitly not affected (only when the context says so), and
+     any contractual terms tied to it (credits, penalties, caps,
+     termination rights, deadlines).
    - If sources conflict, identify the conflict clearly.
 
 4. Citations & Formatting:
@@ -86,7 +92,7 @@ def _get_nvidia_llm():
         from langchain_openai import ChatOpenAI
 
         _nvidia_llm = ChatOpenAI(
-        model=NVIDIA_MODEL,                  # nvidia/nemotron-3-super-120b-a12b
+        model=NVIDIA_MODEL,                  # nvidia/nemotron-3.5-super-vl-120b-a12b
         api_key=NVIDIA_API_KEY,
         base_url=NVIDIA_BASE_URL,
         temperature=0.2,
@@ -117,30 +123,25 @@ Answer the question using the guidelines above.
         ),
     ]
 
-    # Try Groq first.
+    # Try NVIDIA first.
+    try:
+        response = _get_nvidia_llm().invoke(messages)
+        return response.content
+
+    except Exception as nvidia_error:
+        print(
+            "NVIDIA failed; attempting Groq fallback. "
+            f"Error type: {type(nvidia_error).__name__}"
+        )
+
+    # NVIDIA failed: try Groq with the same question and context.
     try:
         response = _get_groq_llm().invoke(messages)
+        print("Answer generated successfully using Groq fallback.")
         return response.content
 
     except Exception as groq_error:
-        print(
-            "Groq failed; attempting NVIDIA fallback. "
-            f"Error type: {type(groq_error).__name__}"
-        )
-
-    # Groq failed: try NVIDIA with the same question and context.
-    try:
-        response = _get_nvidia_llm().invoke(messages)
-        print("Answer generated successfully using NVIDIA fallback.")
-        return response.content
-
-    # except Exception as nvidia_error:
-    #     print(
-    #         "NVIDIA fallback failed. "
-    #         f"Error type: {type(nvidia_error).__name__}"
-    #     )
-    except Exception as nvidia_error:
-        print(f"NVIDIA fallback failed: {type(nvidia_error).__name__}: {nvidia_error}")
+        print(f"Groq fallback failed: {type(groq_error).__name__}: {groq_error}")
 
         raise HTTPException(
             status_code=502,
@@ -148,4 +149,4 @@ Answer the question using the guidelines above.
                 "Could not generate an answer. "
                 "Both primary and fallback AI services failed."
             ),
-        ) from nvidia_error
+        ) from groq_error

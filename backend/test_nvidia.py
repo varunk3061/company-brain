@@ -15,7 +15,7 @@ try:
 
     matches = [
         model.id for model in models.data
-        if "nemotron-3-super-120b-a12b" in model.id
+        if "nemotron-3.5-super-vl-120b-a12b" in model.id
     ]
     print("Matching models:", matches)
 

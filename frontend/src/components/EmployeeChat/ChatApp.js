@@ -39,6 +39,7 @@ async function askBrain(query, conversationId = null) {
     num: data.num,
     id: uid(),
     role: "assistant",
+    text: data.answer || "No answer was returned.",
     paragraphs: (data.answer || "No answer was returned.")
       .split(/\n+/)
       .map((paragraph) => paragraph.trim())
@@ -523,10 +524,10 @@ export default function ChatApp() {
                   Ask The Company Brain
                 </h2>
 
-                <p className="mt-1.5 text-sm text-ink-3">
+                {/* <p className="mt-1.5 text-sm text-ink-3">
                   Answers will come only from documents you have permission to
                   access, with sources cited.
-                </p>
+                </p> */}
 
                 {!FEATURES.questionAnswering && (
                   <div className="mt-6 w-full">
@@ -612,7 +613,7 @@ export default function ChatApp() {
           <div className="shrink-0 border-t border-line bg-surface px-4 pb-3 pt-4 sm:px-8">
             <form
               onSubmit={handleSubmit}
-              className="mx-auto flex max-w-3xl items-center gap-2 rounded-full border border-line bg-surface-2 py-2 pl-5 pr-2 transition focus-within:border-brand focus-within:bg-surface focus-within:ring-4 focus-within:ring-brand/25"
+              className="mx-auto flex max-w-3xl items-center gap-2 rounded-full border border-line bg-surface-2 py-2 pl-5 pr-2 transition"
             >
               <input
                 type="text"
@@ -625,7 +626,7 @@ export default function ChatApp() {
                     : "Asking questions is coming soon"
                 }
                 aria-label="Ask a question"
-                className="min-w-0 flex-1 bg-transparent py-1.5 text-sm text-ink outline-none placeholder:text-ink-3"
+                className="min-w-0 flex-1 border-0 bg-transparent py-1.5 text-sm text-ink shadow-none outline-none ring-0 placeholder:text-ink-3 focus:outline-none! focus:ring-0 focus-visible:outline-none!"
               />
 
               {/* <button
@@ -644,7 +645,7 @@ export default function ChatApp() {
                   !input.trim() || loading || !FEATURES.questionAnswering
                 }
                 aria-label="Send question"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/25 disabled:opacity-50 disabled:shadow-none"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none disabled:opacity-50 disabled:shadow-none"
               >
                 <SendIcon className="h-4.5 w-4.5" />
               </button>
