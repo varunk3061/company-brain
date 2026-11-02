@@ -1,5 +1,10 @@
+# Sends the question and the chosen chunks to the AI to write the answer. It uses NVIDIA first and Groq as a backup
+# (also when NVIDIA returns an empty answer, e.g. a reasoning model that spent its tokens thinking).
+
 import logging
 import os
+
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from fastapi import HTTPException
@@ -23,6 +28,9 @@ NVIDIA_BASE_URL = os.getenv(
 
 # The system prompt tells the model to start its refusal with this text.
 ABSTAIN_PREFIX = "I could not find sufficient information"
+
+# Fixed offset (no tzdata needed on Windows).
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def is_abstention(answer: str) -> bool:
@@ -70,10 +78,29 @@ Follow these rules strictly:
    - If sources conflict, identify the conflict clearly.
 
 4. Citations & Formatting:
-   - Cite each factual claim using the exact source document
-     and page number provided in context.
+   - Cite each point once, using the exact source file name and page
+     from the context, e.g. (HR-POL-001_Notice_Period_Policy_v2.0.pdf, p.1).
+     Do not shorten file names. Do not repeat the same citation after
+     every paragraph.
    - Use valid, readable Markdown without escaping table
      separators or other Markdown characters.
+
+5. Answer style:
+   - Start with a one-line direct answer, then details as short bullets.
+   - Use a table when comparing categories, versions or options.
+   - Keep it brief; no filler, no repeated caveats.
+   - Mention missing details once, at the end, only if they change the answer.
+
+6. Dates, versions and conditions:
+   - Use "Today's date" to decide which policy version is in effect when
+     the question says "today", "now", "current" or gives no date; say
+     which version applies. Mention the older version only for its
+     transition rule.
+   - If the answer depends on a detail the question does not give
+     (e.g. employee category), answer for every case instead of refusing.
+   - Treat questions about "employees" as general, not about the user.
+   - Use the refusal in rule 1 only when the context has no relevant
+     information at all.
 """
 
 # Create models only when first needed.
@@ -94,6 +121,9 @@ def _get_groq_llm():
             model=GROQ_MODEL,
             api_key=GROQ_API_KEY,
             temperature=0,
+            max_tokens=2000,
+            timeout=20,
+            max_retries=0,
         )
 
     return _groq_llm
@@ -114,21 +144,41 @@ def _get_nvidia_llm():
         base_url=NVIDIA_BASE_URL,
         temperature=0.2,
         top_p=0.95,
-        max_tokens=2048,
-        timeout=60,
-        max_retries=1,
+        # max_tokens=2048,
+        max_tokens=2000,
+        timeout=15,
+        max_retries=0,
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
 
     return _nvidia_llm
 
 
+def _text_of(response) -> str:
+    """Answer text of a LangChain response, or "" when the model returned nothing usable."""
+    content = getattr(response, "content", None)
+
+    # Some providers return a list of content parts instead of a string.
+    if isinstance(content, list):
+        content = "".join(
+            part.get("text", "") if isinstance(part, dict) else str(part)
+            for part in content
+        )
+
+    return (content or "").strip()
+
+
 def generate_answer(question: str, context: str) -> str:
+    # Lets the model pick the policy version in effect for "today" questions.
+    today = datetime.now(IST).strftime("%d %B %Y")
+
     messages = [
         ("system", SYSTEM_PROMPT),
         (
             "human",
             f"""
+Today's date: {today}
+
 Question:
 {question}
 
@@ -143,16 +193,37 @@ Answer the question using the guidelines above.
     # Try NVIDIA first.
     try:
         response = _get_nvidia_llm().invoke(messages)
-        return response.content
+        answer = _text_of(response)
+
+        if answer:
+            return answer
+
+        metadata = getattr(response, "response_metadata", {}) or {}
+        logger.warning(
+            "NVIDIA returned an empty answer (model=%s, finish_reason=%s, token_usage=%s); attempting Groq fallback.",
+            metadata.get("model_name", NVIDIA_MODEL),
+            metadata.get("finish_reason"),
+            metadata.get("token_usage"),
+        )
 
     except Exception as nvidia_error:
-        logger.warning("NVIDIA failed; attempting Groq fallback. Error type: %s", type(nvidia_error).__name__)
+        # Full error and traceback, so the real cause (bad model id, auth, timeout...) is visible.
+        logger.exception(
+            "NVIDIA failed; attempting Groq fallback. %s: %s",
+            type(nvidia_error).__name__,
+            nvidia_error,
+        )
 
-    # NVIDIA failed: try Groq with the same question and context.
+    # NVIDIA failed or was empty: try Groq with the same question and context.
     try:
         response = _get_groq_llm().invoke(messages)
-        logger.info("Answer generated successfully using Groq fallback.")
-        return response.content
+        answer = _text_of(response)
+
+        if not answer:
+            raise RuntimeError("Groq returned an empty answer.")
+
+        logger.warning("Answer generated using Groq fallback.")
+        return answer
 
     except Exception as groq_error:
         logger.error("Groq fallback failed: %s: %s", type(groq_error).__name__, groq_error)

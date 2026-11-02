@@ -1,3 +1,5 @@
+# Saves those items and their links in Neo4j as a graph. It also tags documents with topics like “Sales” or “HR Policy”.
+
 import logging
 
 from database.neo4j_connection import (

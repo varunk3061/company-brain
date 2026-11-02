@@ -1,3 +1,5 @@
+# Prepares a document for search: splits the text into chunks of 800 characters, turns each chunk into a vector, saves it in MongoDB, and copies the document’s access rules onto every chunk.
+
 import os
 import hashlib
 import logging

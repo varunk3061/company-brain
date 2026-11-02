@@ -236,3 +236,29 @@ def delete_conversation(conversation_id: str, user_uuid: str):
     return result.deleted_count > 0
 
 #---------------------------------------------------------------------------------------------------
+
+def get_recent_user_questions(conversation_id: str, user_uuid: str, limit: int = 2) -> list:
+
+    """Last `limit` questions the user asked in this conversation (oldest first). Read-only.
+
+    Used to give a short follow-up ("how many days carry over?") the topic of the earlier turns.
+    Only the user's own questions are returned, never assistant answers or document text.
+    """
+
+    doc = chat_conversations_collection.find_one(
+        {"conversation_id": conversation_id, "user_uuid": user_uuid},
+        {"_id": 0, "messages": 1, "message": 1},
+    )
+
+    if not doc or limit <= 0:
+        return []
+
+    questions = [
+        msg["text"].strip()
+        for msg in (doc.get("messages") or doc.get("message") or [])
+        if isinstance(msg, dict) and msg.get("role") == "user" and (msg.get("text") or "").strip()
+    ]
+
+    return questions[-limit:]
+
+#---------------------------------------------------------------------------------------------------

@@ -5,6 +5,8 @@ Every entry point (REST today; chat, retrieval and MCP later) must go through
 lock-step by tests/test_policy.py.
 """
 
+# The security guard. Decides whether a user can see a document, using their department, role and clearance level (public → internal → confidential → restricted).
+
 from dataclasses import dataclass, field
 
 #-------------------------------------------------------------------------------------

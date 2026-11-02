@@ -4,6 +4,8 @@ Only the backend talks to the bucket. The browser never gets the keys; it only r
 short-lived presigned links, and only after the access policy has said yes.
 """
 
+# Saves the original PDFs in Cloudflare R2. Users get a short-lived link to view a PDF, and only if they’re allowed.
+
 import logging
 import os
 from urllib.parse import quote

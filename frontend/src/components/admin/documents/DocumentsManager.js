@@ -2,24 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Eye, Pencil, Search, Trash2, X } from "lucide-react";
-import {
-  AlertCircleIcon,
-  CheckCircleIcon,
-  ChevronDownIcon,
-  CloudUploadIcon,
-  FileIcon,
-  FolderIcon,
-  RefreshIcon,
-} from "../icons";
-import {
-  MAX_UPLOAD_MB,
-  scanFolder,
-  getDocuments,
-  updateDocumentAccess,
-  deleteDocument,
-  uploadDocument,
-  getDocumentViewUrl,
+import {AlertCircleIcon, CheckCircleIcon, ChevronDownIcon, CloudUploadIcon, FileIcon, FolderIcon, RefreshIcon,} from "../icons";
+
+import {MAX_UPLOAD_MB, scanFolder, getDocuments, updateDocumentAccess, deleteDocument, uploadDocument,getDocumentViewUrl,
 } from "@/services/documentService";
+
 import { FEATURES } from "@/config/features";
 import { getDepartments, getRoles } from "@/services/orgService";
 import { getUsers } from "@/services/userService";

@@ -1,3 +1,5 @@
+# Finds matching chunks with MongoDB Vector Search plus Neo4j, and returns only the ones the user is allowed to see.
+
 import logging
 import re
 
@@ -89,6 +91,98 @@ def _vector_search(
     ]
 
     return list(documents_chunk_collection.aggregate(pipeline))
+
+def _keyword_search(
+    question: str,
+    ctx: UserContext,
+    candidate_limit: int = 30,
+    document_uuids: list | None = None,
+) -> list:
+    """Search MongoDB for chunks matching keywords in the question.
+
+    Permissions are strictly enforced inside the query filter.
+    """
+    permission_filter = build_document_filter(ctx)
+    clauses = [permission_filter, {"$text": {"$search": question}}]
+
+    if document_uuids:
+        clauses.append({"document_uuid": {"$in": document_uuids}})
+
+    query = {"$and": clauses}
+    projection = {
+        "_id": 0,
+        "chunk_uuid": 1,
+        "text": 1,
+        "source": 1,
+        "page": 1,
+        "document_uuid": 1,
+        "score": {"$meta": "textScore"},
+    }
+
+    try:
+        return list(
+            documents_chunk_collection.find(query, projection)
+            .sort([("score", {"$meta": "textScore"})])
+            .limit(candidate_limit)
+        )
+    except Exception as exc:
+        logger.warning("Keyword text search unavailable (%s): %s", type(exc).__name__, exc)
+        return []
+
+
+def _reciprocal_rank_fusion(
+    vector_chunks: list,
+    keyword_chunks: list,
+    k: int = 60,
+) -> list:
+    """Combine vector and keyword results using Reciprocal Rank Fusion (RRF).
+
+    Formula: RRF_score = sum(1 / (k + rank))
+    Normalizes differing score scales and prioritizes items appearing in both.
+    """
+    scores = defaultdict(float)
+    chunks_by_id = {}
+
+    for rank, chunk in enumerate(vector_chunks, start=1):
+        cid = chunk.get("chunk_uuid")
+        if cid:
+            scores[cid] += 1.0 / (k + rank)
+            chunks_by_id[cid] = chunk
+
+    for rank, chunk in enumerate(keyword_chunks, start=1):
+        cid = chunk.get("chunk_uuid")
+        if cid:
+            scores[cid] += 1.0 / (k + rank)
+            if cid not in chunks_by_id:
+                chunks_by_id[cid] = chunk
+
+    fused = []
+    for cid, rrf_score in sorted(scores.items(), key=lambda item: item[1], reverse=True):
+        item = dict(chunks_by_id[cid])
+        item["score"] = rrf_score
+        fused.append(item)
+
+    return fused
+
+# Added to pick right chunks
+def _fuse_ranked_lists(*ranked_lists, k: int = 60) -> list:
+    """RRF over any number of ranked lists, so vector, keyword, topic-graph and
+    entity-graph chunks are all scored on the same scale before selection."""
+    scores = defaultdict(float)
+    chunks_by_id = {}
+
+    for ranked in ranked_lists:
+        for rank, chunk in enumerate(ranked, start=1):
+            cid = chunk.get("chunk_uuid")
+            if not cid:
+                continue
+            scores[cid] += 1.0 / (k + rank)
+            chunks_by_id.setdefault(cid, chunk)
+
+    return [
+        {**chunks_by_id[cid], "score": score}
+        for cid, score in sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    ]
 
 
 def _find_related_document_uuids(seed_document_uuids: list) -> list:
@@ -435,13 +529,26 @@ def retrieve_relevant_chunks(
     try:
         question_embedding = get_embedding().embed_query(question)
 
-        # 1. Find relevant, accessible chunks in MongoDB.
-        initial_chunks = _vector_search(
+        # 1. Find relevant, accessible chunks using Hybrid Search (Vector + Keyword)
+        candidate_limit = rerank_service.RERANK_CANDIDATES if reranking_enabled else 30
+
+        vector_chunks = _vector_search(
             question_embedding=question_embedding,
             ctx=ctx,
-            candidate_limit=rerank_service.RERANK_CANDIDATES if reranking_enabled else 30,
+            candidate_limit=candidate_limit,
         )
 
+        keyword_chunks = _keyword_search(
+            question=question,
+            ctx=ctx,
+            candidate_limit=candidate_limit,
+        )
+
+        if keyword_chunks:
+            initial_chunks = _reciprocal_rank_fusion(vector_chunks, keyword_chunks)
+        else:
+            initial_chunks = vector_chunks
+        
         # 2. Discover documents connected through shared topics
         # (needs vector results as seeds).
         seed_document_uuids = list({
@@ -494,7 +601,9 @@ def retrieve_relevant_chunks(
 
         # 4. Combine vector, topic-graph and entity-graph candidates.
         # Duplicate chunks are removed and higher scores are prioritized.
-        all_candidates = initial_chunks + graph_chunks + entity_chunks
+
+        entity_chunks = sorted(entity_chunks, key=lambda c: c.get("score", 0), reverse=True)
+        all_candidates = _fuse_ranked_lists(vector_chunks, keyword_chunks, graph_chunks, entity_chunks)
 
         if not all_candidates:
             return []

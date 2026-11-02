@@ -79,6 +79,8 @@ def create_indexes():
     documents_chunk_collection.create_index([("chunk_uuid", ASCENDING)], unique=True, name="unique_chunk_uuid")
     documents_chunk_collection.create_index([("document_uuid", ASCENDING)], name="document_uuid_index")
 
+    documents_chunk_collection.create_index([("text","text")], name="chunk_text_search")
+
     chat_conversations_collection.create_index(
         [("user_uuid", ASCENDING), ("updated_at", -1)],
         name="user_conversations_lookup"

@@ -1,3 +1,5 @@
+# Fills the database with starting departments and roles for your sample company, Nexora.
+
 from datetime import datetime, timezone
 from uuid import uuid4
 

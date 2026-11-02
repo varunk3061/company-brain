@@ -7,6 +7,7 @@ Rules (cheap and predictable, no extra LLM call):
 
 Entity detection itself needs Neo4j and lives in retrieval_service; this module only applies the rules.
 """
+# Looks at the question and decides which search to use: vector search always, and graph search too when the question asks about a person or thing, or about a link like “who manages…”.
 
 import re
 from dataclasses import dataclass, field

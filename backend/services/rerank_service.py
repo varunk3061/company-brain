@@ -13,6 +13,8 @@ Every score is a probability in [0, 1] (sigmoid of the model logit), so one thre
 If every provider fails, the caller keeps the original order and nothing is abstained on.
 """
 
+# Scores the chunks again by how well they answer the question and keeps the top 10. If even the best one is weak, the system says “I don’t know” instead of guessing.
+
 import json
 import logging
 import math

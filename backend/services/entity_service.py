@@ -5,6 +5,8 @@ Used at upload time only. Sends several chunks per call to keep API usage low.
 If extraction fails, an empty result is returned so the upload still succeeds.
 """
 
+# Uses the AI to find people, departments, projects, policies and similar items in the text, and how they are connected.
+
 import json
 import logging
 import re

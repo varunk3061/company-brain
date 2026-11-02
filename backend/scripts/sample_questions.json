@@ -1,0 +1,78 @@
+[
+  
+  {
+    "question":"What is the CTC band for a Developer at Level 2?",
+    "expected_answer":"INR 9 to 14 lakh per annum."
+  },
+
+  {
+    "question":"What is the profit on Project Atlas?",
+    "expected_answer":"H1 FY27 profit INR 0.42 crore (revenue 1.20, actual cost 0.78), margin 35.0%."
+  },
+
+  {
+    "question":"Which customers are affected if Vertex Cloud misses its 15 January 2027 Pune-2 handover?",
+    "expected_answer":"Sahyadri Bank (Project Atlas: migration window 16-30 Jan 2027, customer's contractual residency date 31 Jan 2027; per the MSA a miss means a service credit of 10% of the annual fee, INR 24,04,800) and Kaveri Logistics (Project Beacon: cutover 12 Feb 2027, customer target 31 Mar 2027, no penalty). NOT Orion Health (AWS Mumbai, depends on LexiScan instead)."
+  },
+
+  {
+    "question":"What risks keep recurring across our delivery projects?",
+    "expected_answer":"Vendor delivery delay (Atlas: Vertex; Beacon: Vertex; Cobalt: LexiScan), scope creep (all three), data quality (all three), key-person dependency (Atlas, Beacon). Compliance review delay is Cobalt only, so not recurring."
+  },
+
+  {
+    "question":"What is the current notice period?",
+    "expected_answer":"Confirmed employees 60 days; probation 30 days; senior managers and heads 90 days (v2.0, effective 1 April 2026)."
+  },
+
+  {
+    "question":"What is my notice period if I resign?",
+    "expected_answer":"90 days: Sales Manager is in the senior managers and heads category (v2.0)."
+  },
+
+  {
+    "question":"What was the notice period for confirmed employees in March 2025?",
+    "expected_answer":"30 days (v1.0, valid 1 April 2023 to 31 March 2026)."
+  },
+
+  {
+    "question":"How many unused annual leave days can I carry forward?",
+    "expected_answer":"10 days (Leave Policy v3.1, T1); they lapse on 31 March. Should flag that an HR email (T3) says 15 and that the policy prevails."
+  },
+
+  {
+    "question":"How many vacation days do staff get in a year?",
+    "expected_answer":"20 days of annual leave (plus 10 sick and 6 casual)."
+  },
+
+  {
+    "question":"What is the maximum hotel cost per night for a trip to Bengaluru?",
+    "expected_answer":"INR 7,000 per night (tier-1 city)."
+  },
+
+  {
+    "question":"Who has to approve a travel claim of INR 40,000?",
+    "expected_answer":"The reporting manager and, because it exceeds INR 25,000, the Accounting Manager. Payroll processes payment."
+  },
+
+  {
+    "question":"What joining bonus was I offered?",
+    "expected_answer":"INR 50,000, recoverable in full if he leaves within 12 months."
+  },
+
+  {
+    "question":"What is Karan Joshi's CTC?",
+    "expected_answer":"No figure."
+  },
+
+  {
+    "question":"What is the CTC band for a Developer at Level 2?",
+    "expected_answer":"INR 9 to 14 lakh per annum."
+  },
+
+  {
+    "question":"What discount am I allowed to offer a prospect?",
+    "expected_answer":"None: SDRs cannot offer discounts. Relationship Managers up to 5%, Sales Manager up to 12%, CEO above 12% (max 20%)."
+  }
+
+]

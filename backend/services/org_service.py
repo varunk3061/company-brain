@@ -1,3 +1,5 @@
+# Add and edit departments (HR, IT, Sales…) and roles (Developer, HR Manager…).
+
 from datetime import datetime, timezone
 from uuid import uuid4
 
