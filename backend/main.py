@@ -2,7 +2,7 @@ import logging
 import os
 import uuid
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager #Manages startup and shutdown operations
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -12,9 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from database.connection import (
-    admins_collection,
+    # admins_collection,
     check_database_connection,
-    users_collection,
+    # users_collection,
 )
 
 from database.neo4j_connection import (
@@ -45,48 +45,48 @@ ADMIN_DEPARTMENT = "EXEC"
 
 #------------------------------------------------------------------------------------------------
 
-def create_initial_admin():
-    """Create the first System Administrator on a brand-new install."""
+# def create_initial_admin():
+#     """Create the first System Administrator on a brand-new install."""
 
-    if users_collection.count_documents({"role_code": ADMIN_ROLE}) > 0:
-        return
+#     if users_collection.count_documents({"role_code": ADMIN_ROLE}) > 0:
+#         return
 
-    if admins_collection.count_documents({}) > 0:
-        # Existing install that has not been migrated: don't create a second admin identity.
-        logger.warning("Legacy admins found. Run `python -m scripts.migrate_users --apply` to move them to `users`.")
-        return
+#     if admins_collection.count_documents({}) > 0:
+#         # Existing install that has not been migrated: don't create a second admin identity.
+#         logger.warning("Legacy admins found. Run `python -m scripts.migrate_users --apply` to move them to `users`.")
+#         return
 
-    admin_name = os.getenv("ADMIN_NAME")
-    admin_email = os.getenv("ADMIN_EMAIL")
-    admin_password = os.getenv("ADMIN_PASSWORD")
+#     admin_name = os.getenv("ADMIN_NAME")
+#     admin_email = os.getenv("ADMIN_EMAIL")
+#     admin_password = os.getenv("ADMIN_PASSWORD")
 
-    if not admin_name or not admin_email or not admin_password:
-        raise RuntimeError(
-            "Set ADMIN_NAME, ADMIN_EMAIL, and ADMIN_PASSWORD "
-            "in .env before starting the application."
-        )
+#     if not admin_name or not admin_email or not admin_password:
+#         raise RuntimeError(
+#             "Set ADMIN_NAME, ADMIN_EMAIL, and ADMIN_PASSWORD "
+#             "in .env before starting the application."
+#         )
 
-    if len(admin_password) < 12:
-        raise RuntimeError("ADMIN_PASSWORD must contain at least 12 characters.")
+#     if len(admin_password) < 12:
+#         raise RuntimeError("ADMIN_PASSWORD must contain at least 12 characters.")
 
-    if len(admin_password.encode("utf-8")) > 72:
-        raise RuntimeError("ADMIN_PASSWORD must not exceed 72 UTF-8 bytes.")
+#     if len(admin_password.encode("utf-8")) > 72:
+#         raise RuntimeError("ADMIN_PASSWORD must not exceed 72 UTF-8 bytes.")
 
-    now = datetime.now(timezone.utc)
+#     now = datetime.now(timezone.utc)
 
-    users_collection.insert_one({
-        "user_uuid": str(uuid.uuid4()),
-        "name": admin_name.strip(),
-        "email": admin_email.strip().lower(),
-        "password_hash": hash_password(admin_password),
-        "department_code": ADMIN_DEPARTMENT,
-        "role_code": ADMIN_ROLE,
-        "status": "active",
-        "created_at": now,
-        "updated_at": now,
-    })
+#     users_collection.insert_one({
+#         "user_uuid": str(uuid.uuid4()),
+#         "name": admin_name.strip(),
+#         "email": admin_email.strip().lower(),
+#         "password_hash": hash_password(admin_password),
+#         "department_code": ADMIN_DEPARTMENT,
+#         "role_code": ADMIN_ROLE,
+#         "status": "active",
+#         "created_at": now,
+#         "updated_at": now,
+#     })
 
-    logger.info("Initial admin created successfully.")
+#     logger.info("Initial admin created successfully.")
 
 #------------------------------------------------------------------------------------------------
 
@@ -94,7 +94,7 @@ def create_initial_admin():
 async def lifespan(app: FastAPI):
     check_database_connection()
     seed_org()
-    create_initial_admin()
+    # create_initial_admin()
 
     try:
         verify_neo4j_connection()

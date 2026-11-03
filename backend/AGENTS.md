@@ -49,7 +49,6 @@ uvicorn main:app --reload --port 8000
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | ✅ for uploads | Private Cloudflare R2 bucket holding uploaded PDFs. API token: *Object Read & Write*, scoped to this bucket. Keys stay on the backend |
 | `MAX_UPLOAD_MB` | | Per-PDF upload limit; default `25` (keep `MAX_UPLOAD_MB` in `frontend/src/services/documentService.js` in step) |
 | `PRESIGNED_URL_TTL_SECONDS` | | Lifetime of "view PDF" links; default `300` (R2 max 7 days) |
-| `DOCUMENTS_ROOT` | legacy | Absolute path; only for the old server-side folder scan |
 | `GROQ_API_KEY`, `GROQ_MODEL` | ✅ for answers | Groq LLM used by `/api/rag/ask` (model defaults to `openai/gpt-oss-120b`) |
 | `NVIDIA_API_KEY`, `NVIDIA_MODEL`, `NVIDIA_BASE_URL` | | Fallback LLM when Groq fails; the key is also used by `RERANK_PROVIDER=nvidia` |
 | `RERANK_PROVIDER` | | `local` (default, MiniLM cross-encoder on CPU), `nvidia` (hosted, falls back to local) or `none` |
@@ -151,7 +150,6 @@ Tokens carry the user id only. Role, clearance and permissions are re-read on **
 | POST | `/api/rag/ask` | signed in | `{question}` → `{answer, sources[{source, page, document_uuid}]}`. Retrieval is permission-filtered **inside** the `$vectorSearch` query; with no permitted evidence the LLM is not called and the answer is "I could not find this information in the accessible documents." |
 | POST | `/api/documents/upload` | `documents.manage` | multipart `file` (one PDF ≤ `MAX_UPLOAD_MB`) → stored in R2 as `documents/<uuid>.pdf`, registered (`internal`, `needs_classification`), then chunked + embedded. 413 too large · 415 not a PDF · 422 unreadable/password-protected · 409 same content already uploaded. An ingestion failure is returned in `ingestion` (the file stays stored) |
 | GET | `/api/documents/{uuid}/view-url` | signed in | `{url, expires_in}`: presigned R2 link to the original PDF. Uses `can_view` (admins included); **404** when not allowed, identical to "not found" |
-| POST | `/api/documents/scan-and-ingest` | `documents.manage` | Legacy: register PDFs in a server folder, then chunk + embed them |
 | POST | `/api/documents/{uuid}/ingest` | `documents.manage` | (Re)process one registered PDF; uploaded PDFs are re-read from R2 (no re-upload) |
 
 **How it fits together.** `services/rag_service.py` (ingest) → `documents_chunk` (text, `embedding`, `classification`, `department_code`, `access`) → `services/query_router.py` (entities named in the question, found via the Neo4j full-text index `entity_key_fulltext`, decide the route: `vector` · `vector+entity` · `vector+entity+facts` for relationship questions) → `services/retrieval_service.py` (`$vectorSearch` with `build_document_filter(ctx)`, plus Neo4j topic/entity candidates; graph facts are kept only if their evidence chunk passes the same filter) → `services/rerank_service.py` (cross-encoder scores up to 50 permitted chunks, keeps the top 6; abstains below `RERANK_MIN_SCORE`, rerank scores go to the audit log only) → `services/llm_service.py` (Groq, cites `[Source: file, Page: N]`). Changing a document's access updates its chunks; deleting a document deletes them.
@@ -186,7 +184,6 @@ Heavy packages (LangChain, sentence-transformers, torch) are imported only when 
 | Method | Path | Permission | Description |
 |---|---|---|---|
 | GET | `/api/documents/` | signed in | Documents the caller may see (managers see all metadata, never content) |
-| POST | `/api/documents/scan-folder` | `documents.manage` | Legacy: register PDFs under `DOCUMENTS_ROOT` as `internal`, `needs_classification` |
 | PATCH | `/api/documents/{uuid}/access` | `documents.manage` | Set owner department, classification, explicit grants |
 | DELETE | `/api/documents/{uuid}` | `documents.manage` | Delete the record |
 
@@ -211,7 +208,7 @@ Implemented collections: `departments`, `roles`, `users`, `documents`, `audit_lo
 | `departments` | `department_uuid`, `code` (unique), `name`, `status` |
 | `roles` | `role_uuid`, `code` (unique), `name`, `department_code`, `clearance`, `permissions[]`, `status` |
 | `users` | `user_uuid`, `name`, `email` (unique), `password_hash`, `department_code`, `role_code`, `status` |
-| `documents` | `document_uuid`, `document_name`, `object_key` (internal, R2 key `documents/<uuid>.pdf`), `content_hash` (SHA-256, unique when present), `size_bytes`, `page_count`, `pdf_metadata{title, author, created_at}`, `uploaded_by`, `department_code` (owner), `classification`, `access{departments[], roles[], users[]}`, `needs_classification`, `status`, `chunk_count`, `last_update`. Legacy folder-scan rows have `file_path` (internal) instead of `object_key` |
+| `documents` | `document_uuid`, `document_name`, `object_key` (internal, R2 key `documents/<uuid>.pdf`), `content_hash` (SHA-256, unique when present), `size_bytes`, `page_count`, `pdf_metadata{title, author, created_at}`, `uploaded_by`, `department_code` (owner), `classification`, `access{departments[], roles[], users[]}`, `needs_classification`, `status`, `chunk_count`, `last_update` |
 | `audit_log` | `ts`, `actor_uuid`, `action`, `target`, `before`, `after` |
 
 Target model for the remaining collections (change it, but record why):
@@ -272,7 +269,6 @@ A system prompt is not a defence. Document text is **data**: scan at ingestion (
 - Passwords: bcrypt, 72-byte cap enforced, never logged or returned.
 - Original PDFs live in a **private** R2 bucket (no public r2.dev URL, no custom domain). Only the backend holds the keys; the browser gets 5-minute presigned links, issued after `can_view`. Object keys are built from the UUID, never from the uploaded file name.
 - Uploads are validated on the server (size, `%PDF-` header, readable, not password-protected); the frontend check is UX only.
-- Legacy folder scans: file system access confined to `DOCUMENTS_ROOT` with resolved-path checks (symlink-safe).
 - CORS: explicit origin allow-list from config — no `*` with credentials.
 - Rate-limit login and chat endpoints before production.
 - The audit log contains user queries; treat it as **confidential** (restricted read access, retention policy).

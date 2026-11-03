@@ -1,13 +1,10 @@
 # Prepares a document for search: splits the text into chunks of 800 characters, turns each chunk into a vector, saves it in MongoDB, and copies the document’s access rules onto every chunk.
 
-import os
-import hashlib
 import logging
 
 from typing import Union
 from uuid import uuid4
 from datetime import datetime, timezone
-from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import HTTPException
@@ -25,9 +22,6 @@ from services.pdf_service import read_pdf, sha256_hex
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-# Only used for documents registered by the legacy folder scan (they have `file_path`, not `object_key`).
-DOCUMENTS_ROOT = os.getenv("DOCUMENTS_ROOT")
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
@@ -53,65 +47,17 @@ def chunk_access_fields(document: dict) -> dict:
 
 #-------------------------------------------------------------------------------------------------------------
 
-def calculate_file_hash(file_path: str) -> str:
-    """Calculate a SHA-256 hash to detect file changes."""
-    sha256 = hashlib.sha256()
-
-    with open(file_path, "rb") as file:
-        for block in iter(lambda: file.read(8192), b""):
-            sha256.update(block)
-
-    return sha256.hexdigest()
-
-#-------------------------------------------------------------------------------------------------------------
-
-def validate_document_path(file_path: str) -> Path:
-    """Validate that the document exists and is a PDF."""
-    path = Path(file_path).expanduser().resolve()
-
-    if not path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="The document file was not found on the server.",
-        )
-
-    if not path.is_file():
-        raise HTTPException(
-            status_code=400,
-            detail="The provided path is not a file.",
-        )
-
-    if path.suffix.lower() != ".pdf":
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF documents are supported.",
-        )
-
-    return path
-
-#-------------------------------------------------------------------------------------------------------------
-
 def load_document_bytes(document: dict) -> tuple:
-    """Return (pdf_bytes, file_name) for a document.
-
-    Uploaded documents are read from the private R2 bucket (`object_key`), so re-ingesting never needs
-    a re-upload. Documents registered by the legacy folder scan are still read from `file_path`.
-    """
+    """Return a document's bytes and file name from private R2 storage."""
 
     object_key = document.get("object_key")
 
     if object_key:
         return storage_service.get_pdf_bytes(object_key), document.get("document_name") or "document.pdf"
 
-    file_path = document.get("file_path")
-
-    if file_path:
-        path = validate_document_path(file_path)
-        return path.read_bytes(), path.name
-
     raise HTTPException(
         status_code=400,
-        detail="This document has no stored file. Upload it again.",
+        detail="This document has no R2 object. Upload it again.",
     )
 
 #-------------------------------------------------------------------------------------------------------------
@@ -175,7 +121,7 @@ def _mark_failed(document_uuid: str, reason: str) -> None:
 def ingest_document(document: Union[dict, str]):
     """
     Process a PDF document:
-    1. Load its bytes (R2 for uploaded documents, local disk for legacy folder-scan documents).
+    1. Load its bytes from private R2 storage.
     2. Check whether the content has changed.
     3. Split its text into chunks.
     4. Generate embeddings and save chunks in MongoDB.

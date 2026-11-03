@@ -84,7 +84,6 @@ def test_changing_document_access_updates_its_chunks_and_delete_removes_them(cli
     assert documents_chunk_collection.count_documents({"document_uuid": "d1"}) == 0
 
 
-def test_scan_and_ingest_requires_documents_manage(client, make_user):
+def test_reingestion_requires_documents_manage(client, make_user):
     _, dev = make_user("dev@nexora.com", "IT", "DEVELOPER")
-    assert client.post("/api/documents/scan-and-ingest", headers=dev, json={"folder_path": "."}).status_code == 403
     assert client.post("/api/documents/d1/ingest", headers=dev).status_code == 403

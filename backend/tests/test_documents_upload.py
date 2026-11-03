@@ -175,7 +175,7 @@ def test_view_url_follows_the_visibility_rule(client, admin, make_user, bucket):
     assert client.get(f"/api/documents/{uuid}/view-url").status_code == 401
 
 
-def test_legacy_folder_documents_still_list_and_delete(client, admin, bucket):
+def test_document_without_r2_object_still_lists_and_deletes(client, admin, bucket):
     documents_collection.insert_one({
         "document_uuid": "legacy", "document_name": "old.pdf", "file_path": "/x/old.pdf",
         "classification": "internal", "access": {"departments": [], "roles": [], "users": []},

@@ -8,7 +8,4 @@ export const FEATURES = {
   passwordReset: false,
   usageMetrics: false,
   securityStatus: false,
-  // Legacy "Document Folder Path" form (server-side folder scan via DOCUMENTS_ROOT).
-  // PDFs are now uploaded to storage instead; turn on only for local development.
-  legacyFolderScan: false,
 };

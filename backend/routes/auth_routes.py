@@ -20,7 +20,7 @@ def _session_user(ctx: UserContext) -> SessionUser:
     return SessionUser(
         user_uuid=ctx.user_uuid, name=ctx.name, email=ctx.email,
         department_code=ctx.department_code,
-        department_name=department["name"] if department else ctx.department_code,
+        department_name=department["name"] if department else ctx.department_code, #it is ternary operator, if department is not None then get the name else return the department code
         role_code=ctx.role_code, role_name=ctx.role_name,
         clearance=ctx.clearance, permissions=sorted(ctx.permissions),
     )
@@ -37,7 +37,7 @@ def login(login_data: LoginRequest):
     user = users_collection.find_one({"email": email})
 
     # Same error and same bcrypt cost for unknown email and wrong password: no user enumeration.
-    stored_hash = (user or {}).get("password_hash") or DUMMY_HASH
+    stored_hash = (user or {}).get("password_hash") or DUMMY_HASH #means if user is there then get the password hash else return the dummy hash
     password_ok = verify_password(password, stored_hash)
 
     if not user or not user.get("password_hash") or not password_ok:

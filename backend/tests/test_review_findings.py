@@ -94,7 +94,6 @@ ADMIN_ONLY = [
     ("GET", "/users"), ("POST", "/users"), ("GET", "/users/x"), ("PUT", "/users/x"), ("DELETE", "/users/x"),
     ("GET", "/audit-logs"), ("GET", "/admin/dashboard"),
     ("POST", "/departments"), ("PUT", "/departments/IT"), ("POST", "/roles"), ("PUT", "/roles/DEVELOPER"),
-    ("POST", "/api/documents/scan-folder"), ("POST", "/api/documents/scan-and-ingest"),
     ("POST", "/api/documents/upload"), ("POST", "/api/documents/x/ingest"),
     ("PATCH", "/api/documents/x/access"), ("DELETE", "/api/documents/x"),
 ]

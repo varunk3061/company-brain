@@ -14,13 +14,6 @@ export const uploadDocument = (file) => {
 export const getDocumentViewUrl = (documentUuid) =>
   api(`/api/documents/${documentUuid}/view-url`);
 
-// Legacy: register the PDFs in a server-side folder and make them searchable (chunk + embed).
-export const scanFolder = (folderPath) =>
-  api("/api/documents/scan-and-ingest", {
-    method: "POST",
-    body: { folder_path: folderPath },
-  });
-
 // Documents the signed-in user is allowed to see.
 export const getDocuments = () => api("/api/documents/");
 

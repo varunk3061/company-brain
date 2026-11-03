@@ -7,12 +7,6 @@ from models.org_model import Classification
 
 #--------------------------------------------------------------------------------------------
 
-class FolderScanRequest(BaseModel):
-    folder_path: str = Field(
-        ..., min_length=1, description="Path to a folder inside the approved document root."
-    )
-
-
 class AccessGrants(BaseModel):
     """Explicit grants. Each list is checked independently (any match grants access)."""
 

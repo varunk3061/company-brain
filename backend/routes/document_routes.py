@@ -5,15 +5,12 @@ from models.document_model import (
     DocumentResponse,
     DocumentUploadResponse,
     DocumentViewUrlResponse,
-    FolderScanRequest,
 )
 from services.access.policy import UserContext
 from services.document_service import (
-    scan_pdf_folder,
     list_documents,
     update_document_access,
     delete_document,
-    scan_and_ingest_pdf_folder,
     upload_document,
     get_document_view_url,
 )
@@ -24,17 +21,8 @@ from utils.auth import get_current_user, require_permission
 
 router = APIRouter(
     prefix="/api/documents",
-    tags=["Document Management"]
+    tags=["Document Management"] #It groups these endpoints under the heading Document Management in FastAPI Swagger documentation.
 )
-
-#----------------------------------------------------------------------------------------------------------------
-
-@router.post("/scan-folder")
-def scan_folder(
-    request: FolderScanRequest,
-    actor: UserContext = Depends(require_permission("documents.manage"))
-):
-    return scan_pdf_folder(request.folder_path)
 
 #----------------------------------------------------------------------------------------------------------------
 
@@ -61,16 +49,6 @@ def remove_document(
 ):
     return delete_document(document_uuid, actor)
 
-
-#----------------------------------------------------------------------------------------------------------------
-
-@router.post("/scan-and-ingest")
-def scan_and_ingest_folder(
-    request: FolderScanRequest,
-    actor: UserContext = Depends(require_permission("documents.manage"))
-):
-    """Register PDFs in a folder and make them searchable."""
-    return scan_and_ingest_pdf_folder(request.folder_path)
 
 #----------------------------------------------------------------------------------------------------------------
 

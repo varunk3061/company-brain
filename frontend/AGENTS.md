@@ -97,7 +97,7 @@ src/
 │   ├── authService.js    login, current user
 │   ├── orgService.js     departments, roles
 │   ├── userService.js    users CRUD
-│   ├── documentService.js  upload, scan, list, access, delete, view URL (PDF preview)
+│   ├── documentService.js  upload, list, access, delete, view URL (PDF preview)
 │   ├── auditService.js   audit log page + filters (action, actor)
 │   └── dashboardService.js
 └── lib/                      Framework-agnostic helpers (api base URL, utils, format.js display formatters)

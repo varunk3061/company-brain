@@ -1,9 +1,7 @@
 import logging
-import os
 import uuid
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import HTTPException
@@ -27,158 +25,6 @@ logger = logging.getLogger(__name__)
 
 #-----------------------------------------------------------------------------------------------------------
 
-# The only directory tree this API is allowed to scan 
-# DOCUMENTS_ROOT = Path(
-#     os.getenv("DOCUMENTS_ROOT", "")
-# ).resolve()
-
-DOCUMENTS_ROOT_VALUE = os.getenv("DOCUMENTS_ROOT", "").strip()
-
-DOCUMENTS_ROOT = (
-    Path(DOCUMENTS_ROOT_VALUE).resolve()
-    if DOCUMENTS_ROOT_VALUE
-    else None
-)
-
-#-----------------------------------------------------------------------------------------------------------
-
-def validate_folder_path(folder_path: str):
-    """Ensure the required folder is inside approved root."""
-
-    if DOCUMENTS_ROOT is None:
-        raise HTTPException(
-            status_code=500,
-            detail="DOCUMENTS_ROOT is not configured in .env."
-        )
-
-    if not DOCUMENTS_ROOT.is_dir():
-        raise HTTPException(
-            status_code=500,
-            detail="DOCUMENTS_ROOT must point to an existing directory."
-        )
-
-    requested_path = Path(folder_path)
-
-    if not requested_path.is_absolute():
-        requested_path = DOCUMENTS_ROOT / requested_path
-
-    try : 
-        requested_path = requested_path.resolve(strict=True)
-        requested_path.relative_to(DOCUMENTS_ROOT)
-    except (ValueError, OSError, RuntimeError):
-        raise HTTPException(
-            status_code=400,
-            detail="Folder must exist inside the approved documents root."
-        )
-
-    if not requested_path.is_dir():
-        raise HTTPException(
-            status_code=400,
-            detail="The supplied path is not a directory."
-        )
-
-    return requested_path
-
-#-----------------------------------------------------------------------------------------------------------
-
-def scan_pdf_folder(folder_path: str):
-    """Register PDF metadata in MongoDB"""
-
-    folder = validate_folder_path(folder_path)
-
-    created = []
-    skipped = []
-    errors = []
-
-    # Search the selected folder and its subfolders.
-    for pdf_path in folder.rglob("*"):
-        if not pdf_path.is_file() or pdf_path.suffix.lower() != ".pdf":
-            continue
-
-        try :
-            resolved_path = pdf_path.resolve(strict=True)
-            resolved_path.relative_to(DOCUMENTS_ROOT)
-
-            stat = resolved_path.stat()
-
-            document_name = resolved_path.name
-            file_path = os.path.normcase(str(resolved_path))
-
-            # Use the file's actual modification time.
-            last_update = datetime.fromtimestamp(
-                stat.st_mtime,
-                tz=timezone.utc
-            )
-
-            existing = documents_collection.find_one(
-                {"file_path": file_path},
-                {"_id": 0, "document_uuid": 1}
-            )
-
-            if existing:
-                # Do Not overwrite the admin's category or allowed roles.
-                documents_collection.update_one(
-                    {"file_path" : file_path},
-                    {
-                        "$set" : {
-                            "document_name" : document_name,
-                            "last_update" : last_update
-                        }
-                    }
-                )
-
-                skipped.append({
-                    "document_name" : document_name,
-                    "reason" : "Already registered; metadata checked"
-                })
-                continue
-
-            document = {
-                "document_uuid" : str(uuid.uuid4()),
-                "document_name" : document_name,
-                "category" : None,
-                "last_update" : last_update,
-                # Safe defaults for a freshly scanned file; an admin must classify it.
-                "department_code" : None,
-                "classification" : "internal",
-                "access" : {"departments": [], "roles": [], "users": []},
-                "needs_classification" : True,
-                "file_path" : file_path
-            }
-
-            documents_collection.insert_one(document)
-
-            created.append({
-                "document_uuid" : document["document_uuid"],
-                "document_name" : document_name
-            })
-
-        except DuplicateKeyError:
-             # Another scan may have registered this file concurrently.
-            skipped.append({
-                "document_name": pdf_path.name,
-                "reason": "Already registered"
-            })
-
-        except (OSError, PermissionError):
-            logger.exception("Could not register %s", pdf_path)
-            errors.append({
-                "document_name": pdf_path.name,
-                "reason": "File could not be read."
-            })
-
-    return {
-        "message": "Folder scan completed",
-        "created_count": len(created),
-        "existing_count": len(skipped),
-        "error_count": len(errors),
-        "created": created,
-        "existing": skipped,
-        "errors": errors
-    }
-
-#-----------------------------------------------------------------------------------------------------------
-
 PUBLIC_FIELDS = {
     "_id": 0,
     "document_uuid": 1,
@@ -199,10 +45,10 @@ PUBLIC_FIELDS = {
 def list_documents(ctx: UserContext):
     """Return documents the caller may see. Managers see all metadata (never content) for governance."""
 
-    query = {} if ctx.has("documents.manage") else build_document_filter(ctx)
+    query = {} if ctx.has("documents.manage") else build_document_filter(ctx)#If the user has documents.manage, the query is {}, meaning all document metadata is retrieved.Otherwise, build_document_filter(ctx) constructs a query based on the user's access.
 
     return list(
-        documents_collection.find(query, PUBLIC_FIELDS).sort("document_name", 1)
+        documents_collection.find(query, PUBLIC_FIELDS).sort("document_name", 1) #sort the documents by name in ascending order before returning 
     )
 
 #-----------------------------------------------------------------------------------------------------------
@@ -312,59 +158,6 @@ def delete_document(document_uuid: str, actor: UserContext):
 
 #-----------------------------------------------------------------------------------------------------------
 
-def scan_and_ingest_pdf_folder(folder_path: str):
-    """Register the PDFs in a folder, then chunk and embed each one so it becomes searchable."""
-
-    from services.rag_service import ingest_document  # heavy imports stay lazy
-
-    scan_result = scan_pdf_folder(folder_path)
-    folder = validate_folder_path(folder_path)
-
-    ingestion_results = []
-    ingestion_errors = []
-
-    for pdf_path in folder.rglob("*"):
-        if not pdf_path.is_file() or pdf_path.suffix.lower() != ".pdf":
-            continue
-
-        try:
-            resolved_path = pdf_path.resolve(strict=True)
-            resolved_path.relative_to(DOCUMENTS_ROOT)
-
-            document = documents_collection.find_one(
-                {"file_path": os.path.normcase(str(resolved_path))},
-                {"_id": 0, "document_uuid": 1, "document_name": 1},
-            )
-
-            if not document:
-                ingestion_errors.append({"document_name": pdf_path.name, "reason": "PDF was not registered in documents."})
-                continue
-
-            ingestion_results.append({
-                "document_uuid": document["document_uuid"],
-                "document_name": document["document_name"],
-                "result": ingest_document(document["document_uuid"]),
-            })
-
-        except Exception as exc:
-            # HTTPException details are written for the client; anything else stays in the log.
-            logger.exception("Ingestion failed for %s", pdf_path)
-            ingestion_errors.append({
-                "document_name": pdf_path.name,
-                "reason": getattr(exc, "detail", None) or "Ingestion failed. Check the backend logs.",
-                "error_type": type(exc).__name__,
-            })
-
-    return {
-        **scan_result,
-        "ingested_count": len(ingestion_results),
-        "ingestion_results": ingestion_results,
-        "ingestion_errors": ingestion_errors,
-        "message": "Folder scan and ingestion finished.",
-    }
-
-#-----------------------------------------------------------------------------------------------------------
-
 def _clean_filename(name) -> str:
     """Keep only the file's own name (no folders), without control characters, at most 200 chars."""
 
@@ -403,7 +196,7 @@ def upload_document(file, actor: UserContext):
     pdf = read_pdf(data, extract_text=False)  # size, %PDF- header, readable, not password-protected
     content_hash = sha256_hex(data)
 
-    # Same bytes already registered (by an earlier upload, or by the legacy folder scan)?
+    # Same bytes already registered by an earlier upload?
     duplicate = documents_collection.find_one(
         {"$or": [{"content_hash": content_hash}, {"file_hash": content_hash}]},
         {"_id": 0, "document_name": 1},
@@ -451,7 +244,6 @@ def upload_document(file, actor: UserContext):
             # Same content uploaded at the same moment by another request.
             raise HTTPException(status_code=409, detail="This PDF is already uploaded.") from exc
 
-        # Another unique index (for example an old one on `file_path`) rejected a record without that field.
         logger.error("Document insert blocked by a unique index: %s", (exc.details or {}).get("keyPattern"))
         raise HTTPException(status_code=500, detail="Could not register the document. Check the backend logs.") from exc
 

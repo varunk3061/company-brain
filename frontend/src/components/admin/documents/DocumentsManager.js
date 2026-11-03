@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Eye, Pencil, Search, Trash2, X } from "lucide-react";
-import {AlertCircleIcon, CheckCircleIcon, ChevronDownIcon, CloudUploadIcon, FileIcon, FolderIcon, RefreshIcon,} from "../icons";
+import {AlertCircleIcon, CheckCircleIcon, ChevronDownIcon, CloudUploadIcon, FileIcon, RefreshIcon,} from "../icons";
 
-import {MAX_UPLOAD_MB, scanFolder, getDocuments, updateDocumentAccess, deleteDocument, uploadDocument,getDocumentViewUrl,
+import {MAX_UPLOAD_MB, getDocuments, updateDocumentAccess, deleteDocument, uploadDocument,getDocumentViewUrl,
 } from "@/services/documentService";
 
-import { FEATURES } from "@/config/features";
 import { getDepartments, getRoles } from "@/services/orgService";
 import { getUsers } from "@/services/userService";
 import Badge, { ClassificationBadge } from "@/components/ui/Badge";
@@ -173,11 +172,6 @@ export default function DocumentsManager() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  const [path, setPath] = useState("");
-  const [pathError, setPathError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [submittedPath, setSubmittedPath] = useState("");
-
   // Document selected for deletion
   const [deleteDoc, setDeleteDoc] = useState(null);
 
@@ -226,7 +220,7 @@ export default function DocumentsManager() {
             })),
           ),
         )
-        .catch((err) => setPathError(err.message || "Failed to load documents.")),
+        .catch(() => {}),
     [],
   );
 
@@ -346,32 +340,6 @@ export default function DocumentsManager() {
       setDeleteError(err.message || "Failed to delete document.");
     } finally {
       setDeleting(false);
-    }
-  };
-
-  const handlePathSubmit = async (e) => {
-    e.preventDefault();
-    const value = path.trim();
-    setSubmittedPath("");
-
-    if (!value) {
-      setPathError("Enter the folder path.");
-      return;
-    }
-    setPathError("");
-    setSubmitting(true);
-
-    try {
-      const result = await scanFolder(value);
-      await loadDocuments();
-      setSubmittedPath(
-        `Folder processed: ${result.created_count} new, ${result.existing_count} existing, ${result.ingested_count} ingested, ${result.ingestion_errors?.length || 0} ingestion errors.`,
-      );
-      setPath("");
-    } catch (err) {
-      setPathError(err.message || "Failed to scan folder.");
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -553,67 +521,6 @@ export default function DocumentsManager() {
           </ul>
         )}
       </section>
-
-      {/* Folder path (legacy, server-side folder scan) */}
-      {FEATURES.legacyFolderScan && (
-      <section className="rounded-card border border-line bg-surface p-6 shadow-card">
-        <form onSubmit={handlePathSubmit} noValidate>
-          <label
-            htmlFor="folder-path"
-            className="block text-base font-semibold text-ink"
-          >
-            Document Folder Path
-          </label>
-          <p className="mt-1 text-sm text-ink-3">
-            Enter the path to the folder that contains the documents to index.
-          </p>
-
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <FolderIcon className="pointer-events-none absolute left-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-ink-3" />
-              <input
-                id="folder-path"
-                type="text"
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-                placeholder="/mnt/company-docs/hr-policies"
-                aria-invalid={!!pathError}
-                className={`block w-full rounded-control border bg-surface-2 py-3 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-ink-3 focus:bg-surface focus:ring-4 ${
-                  pathError
-                    ? "border-danger/30 focus:border-danger focus:ring-danger/25"
-                    : "border-line focus:border-brand focus:ring-brand/25"
-                }`}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex items-center justify-center gap-2 rounded-control bg-brand px-6 py-3 text-sm font-semibold text-on-brand shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/25 disabled:opacity-70"
-            >
-              {submitting && <RefreshIcon className="h-4 w-4 animate-spin" />}
-              {submitting ? "Submitting..." : "Submit"}
-            </button>
-          </div>
-
-          {pathError && (
-            <p role="alert" className="mt-2 text-sm text-danger">
-              {pathError}
-            </p>
-          )}
-          {submittedPath && (
-            <p
-              role="status"
-              className="mt-3 flex items-center gap-1.5 text-sm text-success"
-            >
-              <CheckCircleIcon className="h-4 w-4 shrink-0" />
-              <span className="break-all">
-                Folder submitted for indexing: {submittedPath}
-              </span>
-            </p>
-          )}
-        </form>
-      </section>
-      )}
 
       {/* Table */}
       <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">

@@ -139,7 +139,7 @@ API docs: http://127.0.0.1:8000/docs (Swagger) · http://127.0.0.1:8000/redoc
 | Part (from brief) | Status | Notes |
 |---|---|---|
 | 1. Platform — auth, users, departments, roles | 🟢 Done (v1) | Unified `users`, 6 departments + 19 roles from `Documents/orgChart.docx`, role-based permissions, one login |
-| 1. Platform — documents CRUD, versions | 🟡 Partial | Folder scan registers PDFs; owner dept + classification + explicit grants enforced on listing; delete. No upload/versioning yet |
+| 1. Platform — documents CRUD, versions | 🟡 Partial | PDFs upload to private R2 storage; owner dept + classification + explicit grants enforced on listing; delete. No versioning yet |
 | 1. Platform — approval workflow | 🔴 Not started | |
 | 1. Platform — audit trail | 🟡 Partial | Admin changes (users, org, document access, views) and `rag.ask` are written to `audit_log`; admin viewer at `/admin/audit-logs` with action/actor filters and per-action colour tags. Full query audit (retrieved chunks, guard flags) not yet |
 | 2. Document validation pipeline | 🔴 Not started | |
