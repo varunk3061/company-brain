@@ -24,7 +24,7 @@ RELATIONAL_PATTERN = re.compile(
     r"related|connected|relationship|"
     r"how\s+many|list\s+(?:all|the)"
     r")\b",
-    re.IGNORECASE,
+    re.IGNORECASE, #it ignore the case of the letters in the question. 
 )
 
 
@@ -36,11 +36,11 @@ class RetrievalPlan:
     relational: bool = False
 
     @property
-    def use_entity_graph(self) -> bool:
+    def use_entity_graph(self) -> bool: #This checks whether any entity keys were detected.
         return bool(self.entity_keys)
 
     @property
-    def use_graph_facts(self) -> bool:
+    def use_graph_facts(self) -> bool: #This checks two conditions:At least one entity must be detected. The question must be relational.
         return bool(self.entity_keys) and self.relational
 
     @property
@@ -55,10 +55,11 @@ class RetrievalPlan:
 
 def is_relational(question: str) -> bool:
     return bool(RELATIONAL_PATTERN.search(question or ""))
+#find the relational pattern in the question. using the regex pattern defined earlier
 
 
 def build_plan(question: str, entity_keys: list[str] | tuple[str, ...]) -> RetrievalPlan:
     return RetrievalPlan(
         entity_keys=tuple(sorted(set(entity_keys))),
-        relational=is_relational(question),
+        relational=is_relational(question), #it is either true or false
     )

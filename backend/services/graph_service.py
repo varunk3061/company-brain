@@ -272,7 +272,7 @@ def detect_topics(chunk_records):
     return matched_topics
 
 #------------------------------------------------------------------------------------------------------------------------------
-
+#checks whether the entity is already existing
 def _load_saved_entities(document_uuid, file_hash):
     """
     Reuse entities already in Neo4j when the PDF has not changed,
@@ -326,6 +326,7 @@ def sync_document_to_graph(document, chunk_records):
     if graph_data is None:
         graph_data = extract_from_chunks(chunk_records)
 
+    #MERGE checks whether a matching node exists. If it exists, it reuses it. Otherwise, it creates it.
     def write_graph(tx):
         document_access = get_access_fields(document)
 

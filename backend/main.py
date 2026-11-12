@@ -23,6 +23,9 @@ from database.neo4j_connection import (
 )
 from services.graph_service import initialize_graph
 
+from MCP.server import create_mcp_app
+from MCP.server import create_mcp_app, mcp
+
 from routes.audit_routes import router as audit_router
 from routes.auth_routes import router as auth_router
 from routes.dashboard_routes import router as dashboard_router
@@ -103,9 +106,9 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Neo4j initialization failed")
         raise
-
     try:
-        yield
+        async with mcp.session_manager.run():
+            yield
     finally:
         close_neo4j_connection()
 
@@ -125,6 +128,7 @@ app.include_router(dashboard_router)
 app.include_router(document_router)
 app.include_router(rag_router)
 app.include_router(chat_router)
+app.mount("/mcp", create_mcp_app())
 
 app.add_middleware(
     CORSMiddleware,

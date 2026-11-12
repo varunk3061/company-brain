@@ -1,6 +1,7 @@
 # Python cache files — anywhere in the project
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # Python virtual environments
 venv/

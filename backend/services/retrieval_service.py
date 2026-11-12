@@ -54,13 +54,14 @@ def _vector_search(
     Permissions are enforced inside every vector search query.
     """
 
+    #checks the user's permissions and builds a filter to ensure that only chunks from documents the user is allowed to see are returned. 
     permission_filter = build_document_filter(ctx)
 
     search_filter = permission_filter
 
     if document_uuids:
         search_filter = {
-            "$and": [
+            "$and": [ #uses the $and operator to become the two cosnditions true
                 permission_filter,
                 {"document_uuid": {"$in": document_uuids}},
             ]
@@ -103,12 +104,31 @@ def _keyword_search(
     Permissions are strictly enforced inside the query filter.
     """
     permission_filter = build_document_filter(ctx)
-    clauses = [permission_filter, {"$text": {"$search": question}}]
+    clauses = [permission_filter, {"$text": {"$search": question}}] #allows for a text search on the "text" field of the chunks, using the question as the search query
 
+#     clauses = [
+#     {
+#         "access.roles": {
+#             "$eq": "finance_analyst"
+#         }
+#     },
+#     {
+#         "$text": {
+#             "$search": ""What is the finance department policy?"
+#         }
+#     }
+# ]
     if document_uuids:
         clauses.append({"document_uuid": {"$in": document_uuids}})
 
     query = {"$and": clauses}
+#     query = { this is combine query with the permission filter, text search, and document UUIDs (if provided). 
+#     "$and": [
+#         {"access.roles": {"$eq": "finance_analyst"}},
+#         {"$text": {"$search": "finance department"}},
+#         {"document_uuid": {"$in": ["DOC-101", "DOC-102"]}}
+#     ]
+# }
     projection = {
         "_id": 0,
         "chunk_uuid": 1,
@@ -121,9 +141,9 @@ def _keyword_search(
 
     try:
         return list(
-            documents_chunk_collection.find(query, projection)
-            .sort([("score", {"$meta": "textScore"})])
-            .limit(candidate_limit)
+            documents_chunk_collection.find(query, projection) #finds the matching chunking using the query
+            .sort([("score", {"$meta": "textScore"})]) #sort the results by the text search score, with the highest-scoring chunks first
+            .limit(candidate_limit) #30 chunks will retrives
         )
     except Exception as exc:
         logger.warning("Keyword text search unavailable (%s): %s", type(exc).__name__, exc)
@@ -140,8 +160,8 @@ def _reciprocal_rank_fusion(
     Formula: RRF_score = sum(1 / (k + rank))
     Normalizes differing score scales and prioritizes items appearing in both.
     """
-    scores = defaultdict(float)
-    chunks_by_id = {}
+    scores = defaultdict(float) #dict to stores the RRF scores for each chunk, with chunk UUIDs as keys and their corresponding RRF scores as values. 
+    chunks_by_id = {} #store the actual chunk data
 
     for rank, chunk in enumerate(vector_chunks, start=1):
         cid = chunk.get("chunk_uuid")
@@ -156,11 +176,26 @@ def _reciprocal_rank_fusion(
             if cid not in chunks_by_id:
                 chunks_by_id[cid] = chunk
 
+    #using this we got the rrf scores for each chunk,vector chunk and keyword chunks
+
     fused = []
     for cid, rrf_score in sorted(scores.items(), key=lambda item: item[1], reverse=True):
         item = dict(chunks_by_id[cid])
         item["score"] = rrf_score
         fused.append(item)
+
+#     fused = [
+#     {
+#         "chunk_uuid": "CHUNK-101",
+#         "document_uuid": "DOC-501",
+#         "score": 0.032
+#     },
+#     {
+#         "chunk_uuid": "CHUNK-102",
+#         "document_uuid": "DOC-501",
+#         "score": 0.025
+#     }
+# ]
 
     return fused
 
@@ -168,8 +203,8 @@ def _reciprocal_rank_fusion(
 def _fuse_ranked_lists(*ranked_lists, k: int = 60) -> list:
     """RRF over any number of ranked lists, so vector, keyword, topic-graph and
     entity-graph chunks are all scored on the same scale before selection."""
-    scores = defaultdict(float)
-    chunks_by_id = {}
+    scores = defaultdict(float) #use to stores the rrf scores for each chunk, with chunk UUIDs as keys 
+    chunks_by_id = {} #use to store the actual chunk data, with chunk UUIDs as keys
 
     for ranked in ranked_lists:
         for rank, chunk in enumerate(ranked, start=1):
@@ -177,12 +212,14 @@ def _fuse_ranked_lists(*ranked_lists, k: int = 60) -> list:
             if not cid:
                 continue
             scores[cid] += 1.0 / (k + rank)
-            chunks_by_id.setdefault(cid, chunk)
+            chunks_by_id.setdefault(cid, chunk) #setdefault() keeps the first chunk record for C101 and doesn't replace it when it appears again.
 
     return [
         {**chunks_by_id[cid], "score": score}
         for cid, score in sorted(scores.items(), key=lambda item: item[1], reverse=True)
     ]
+#So the output is one combined list of unique chunks, ordered by RRF score.
+#If a chunk is found by multiple search methods, it gets multiple RRF contributions. If it appears near the top of those lists, its score becomes higher.
 
 
 def _find_related_document_uuids(seed_document_uuids: list) -> list:
@@ -198,15 +235,17 @@ def _find_related_document_uuids(seed_document_uuids: list) -> list:
 
     driver = get_neo4j_driver()
 
+    #Find another document that shares at least one topic with an already retrieved document.
     query = """
     MATCH (seed:Document)-[:HAS_TOPIC]->(t:Topic)
       <-[:HAS_TOPIC]-(related:Document)
       WHERE seed.document_uuid IN $seed_ids
       WITH DISTINCT related, $seed_ids AS seed_ids
       WHERE NOT related.document_uuid IN seed_ids
-      RETURN related.document_uuid AS document_uuid
+      RETURN related.document_uuid AS document_uuid 
       LIMIT $max_documents
     """
+    #it only returns the document UUID of the related documents that share topics with the seed documents, up to a maximum of MAX_GRAPH_DOCUMENTS.
 
     with driver.session(database=NEO4J_DATABASE) as session:
         records = session.run(
@@ -246,7 +285,7 @@ def _detect_entity_keys(session, question: str) -> list:
 
     if not tokens:
         return []
-
+    #I have these words: responsibilities, finance, manager. Can you find entities related to these words?"
     try:
         records = list(session.run(
             """
@@ -262,7 +301,7 @@ def _detect_entity_keys(session, question: str) -> list:
     except Exception as exc:
         logger.warning("Entity full-text index unavailable (%s); scanning all entity keys.", type(exc).__name__)
         records = list(session.run("MATCH (e:Entity) RETURN e.key AS key"))
-
+    #function returns a Python list containing the entity keys that match the user's question.
     return list(dict.fromkeys(
         record["key"]
         for record in records
@@ -275,6 +314,8 @@ def _detect_entity_keys(session, question: str) -> list:
 def _entity_chunk_uuids_for_keys(session, keys: list) -> list:
     """Chunks mentioning these entities or their direct neighbours (IDs only)."""
 
+
+    #it finds all chunks that mention any of the entity keys in the provided list
     records = session.run(
         """
         MATCH (e:Entity) WHERE e.key IN $keys
@@ -322,7 +363,7 @@ def plan_retrieval(question: str) -> RetrievalPlan:
     try:
         driver = get_neo4j_driver()
         with driver.session(database=NEO4J_DATABASE) as session:
-            keys = _detect_entity_keys(session, question)
+            keys = _detect_entity_keys(session, question) #detct_entity_keys function returns a list of entity keys that match the user's question.  like ["finance department", "manager", "responsibilities"] are the matching entity in question
     except Exception as exc:
         logger.warning("Entity detection unavailable, using vector-only plan: %s: %s", type(exc).__name__, exc)
         keys = []
@@ -332,7 +373,7 @@ def plan_retrieval(question: str) -> RetrievalPlan:
 
 def _find_graph_facts(keys: list) -> list:
     """Relations touching the question's entities, with their evidence chunk (no permission check yet)."""
-
+    #suppose one realtion is entity mentions in __ chunk so  it gives the chunk id that mentions that entity  
     driver = get_neo4j_driver()
 
     with driver.session(database=NEO4J_DATABASE) as session:
@@ -349,6 +390,13 @@ def _find_graph_facts(keys: list) -> list:
         )
         return [dict(record) for record in records]
 
+#     {
+#     "subject": "Ravi Kumar",
+#     "relation": "MANAGES",
+#     "object": "Project Atlas",
+#     "chunk_uuid": "chunk_101"
+# }
+
 
 def retrieve_graph_facts(plan: RetrievalPlan, ctx: UserContext) -> list:
     """
@@ -361,6 +409,21 @@ def retrieve_graph_facts(plan: RetrievalPlan, ctx: UserContext) -> list:
 
     if not plan.use_graph_facts:
         return []
+
+#     [
+#     {
+#         "subject": "Ravi Kumar",
+#         "relation": "MANAGES",
+#         "object": "Project Atlas",
+#         "chunk_uuid": "chunk_101"
+#     },
+#     {
+#         "subject": "Project Atlas",
+#         "relation": "BELONGS_TO",
+#         "object": "Engineering Department",
+#         "chunk_uuid": "chunk_102"
+#     }
+# ]
 
     try:
         candidates = [
@@ -384,6 +447,22 @@ def retrieve_graph_facts(plan: RetrievalPlan, ctx: UserContext) -> list:
             )
         }
 
+#         evidence = {
+#     "chunk_101": {
+#         "chunk_uuid": "chunk_101",
+#         "document_uuid": "doc_001",
+#         "source": "project_details.pdf",
+#         "page": 5
+#     },
+
+#     "chunk_102": {
+#         "chunk_uuid": "chunk_102",
+#         "document_uuid": "doc_002",
+#         "source": "team_structure.pdf",
+#         "page": 3
+#     }
+# }
+
     except Exception as exc:
         logger.warning("Graph facts unavailable: %s: %s", type(exc).__name__, exc)
         return []
@@ -406,6 +485,18 @@ def retrieve_graph_facts(plan: RetrievalPlan, ctx: UserContext) -> list:
             "source": chunk.get("source", "Unknown document"),
             "page": chunk.get("page"),
         }
+
+#         facts = {
+#     ("Ravi Kumar", "MANAGES", "Project Atlas"): {
+#         "subject": "Ravi Kumar",
+#         "relation": "MANAGES",
+#         "object": "Project Atlas",
+#         "chunk_uuid": "chunk_101",
+#         "document_uuid": "doc_001",
+#         "source": "project_details.pdf",
+#         "page": 5
+#     }
+# }
 
         if len(facts) >= MAX_GRAPH_FACTS:
             break
@@ -450,6 +541,25 @@ def _load_entity_chunks(chunk_uuids: list, ctx: UserContext, question_embedding:
 
     return chunks
 
+#     chunks = [
+#     {
+#         "chunk_uuid": "CHUNK-101",
+#         "text": "Finance department manages budgets.",
+#         "source": "finance_policy.pdf",
+#         "page": 5,
+#         "document_uuid": "DOC-101",
+#         "score": 0.96
+#     },
+#     {
+#         "chunk_uuid": "CHUNK-103",
+#         "text": "Finance department prepares reports.",
+#         "source": "finance_policy.pdf",
+#         "page": 8,
+#         "document_uuid": "DOC-101",
+#         "score": 0.915
+#     }
+# ]
+
 
 def _select_chunks(
     candidates: list,
@@ -462,6 +572,12 @@ def _select_chunks(
     by default, `rerank_score` after reranking), and limit how many
     chunks come from each document.
     """
+#     It performs four operations:
+# 1. Removes duplicate chunks.
+# 2. Sorts chunks by their scores.
+# 3. Limits the number of chunks from each document.
+# 4. Stops when it reaches the required total number of chunks.
+
 
     unique_chunks = {}
 
@@ -538,21 +654,21 @@ def retrieve_relevant_chunks(
             candidate_limit=candidate_limit,
         )
 
-        keyword_chunks = _keyword_search(
+        keyword_chunks = _keyword_search( #using the monogodb text search to find chunks that match keywords in the question, 
             question=question,
             ctx=ctx,
             candidate_limit=candidate_limit,
         )
 
         if keyword_chunks:
-            initial_chunks = _reciprocal_rank_fusion(vector_chunks, keyword_chunks)
+            initial_chunks = _reciprocal_rank_fusion(vector_chunks, keyword_chunks) #it give chunks with RRF score
         else:
             initial_chunks = vector_chunks
         
         # 2. Discover documents connected through shared topics
         # (needs vector results as seeds).
         seed_document_uuids = list({
-            chunk["document_uuid"]
+            chunk["document_uuid"] #chunks document_uuid is used to find related documents in Neo4j
             for chunk in initial_chunks
             if chunk.get("document_uuid")
         })
@@ -583,12 +699,13 @@ def retrieve_relevant_chunks(
 
         # 3b. Entity graph: chunks mentioning entities named in the question.
         # Neo4j gives chunk IDs only; MongoDB applies the permission filter.
+        #it finds the entity from question then it finds the chunks that mention those entities and get the chunk UUIDs. 
         try:
             if plan is None:
-                entity_chunk_uuids = _find_entity_chunk_uuids(question)
+                entity_chunk_uuids = _find_entity_chunk_uuids(question) #it return entity chunk UUIDs that match the question
             elif plan.use_entity_graph:
                 with get_neo4j_driver().session(database=NEO4J_DATABASE) as session:
-                    entity_chunk_uuids = _entity_chunk_uuids_for_keys(session, plan.entity_keys)
+                    entity_chunk_uuids = _entity_chunk_uuids_for_keys(session, plan.entity_keys)#The helper finds chunks mentioning Finance and its directly related entities.
             else:
                 entity_chunk_uuids = []
 
@@ -610,11 +727,12 @@ def retrieve_relevant_chunks(
 
         # 5. Rerank: score the best RERANK_CANDIDATES (deduplicated) with a
         # cross-encoder and keep the top RERANK_TOP_N for the LLM.
+        #The cross-encoder examines the actual question and chunk text together to estimate their relevance.
         if reranking_enabled:
             pool = _select_chunks(
                 candidates=all_candidates,
-                limit=rerank_service.RERANK_CANDIDATES,
-                max_per_document=rerank_service.RERANK_CANDIDATES,
+                limit=rerank_service.RERANK_CANDIDATES, #50
+                max_per_document=rerank_service.RERANK_CANDIDATES,#50
             )
             reranked = rerank_service.rerank(question, pool)
 

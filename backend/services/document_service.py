@@ -63,6 +63,9 @@ def update_document_access(document_uuid: str, data: DocumentAccessUpdate, actor
 
     grants = data.access
 
+    #That means no invalid departments were found.
+    #it checks the frontend send deaprtment, role, and user codes against the database to ensure they are valid. 
+    #it uses set to differentate between the provided codes and the existing ones in the database
     unknown_departments = set(grants.departments) - {
         d["code"] for d in departments_collection.find({"code": {"$in": grants.departments}}, {"code": 1})
     }
@@ -76,6 +79,7 @@ def update_document_access(document_uuid: str, data: DocumentAccessUpdate, actor
     if unknown_departments or unknown_roles or unknown_users:
         raise HTTPException(status_code=422, detail="Access list contains unknown departments, roles or users.")
 
+    #later you record the old and new access information in the audit log.
     before = documents_collection.find_one({"document_uuid": document_uuid}, PUBLIC_FIELDS)
 
     if not before:
@@ -111,6 +115,7 @@ def update_document_access(document_uuid: str, data: DocumentAccessUpdate, actor
     except Exception:
         logger.exception("Graph access update failed for %s", document_uuid)
 
+    #update the audit log with the changes made to the document's access information.
     doc_name = before.get("document_name") or document_uuid
     audit_service.record(
         actor, "document.access.update", doc_name,
@@ -157,7 +162,7 @@ def delete_document(document_uuid: str, actor: UserContext):
 
 
 #-----------------------------------------------------------------------------------------------------------
-
+#helper function to remove the / from path and keep only the file name
 def _clean_filename(name) -> str:
     """Keep only the file's own name (no folders), without control characters, at most 200 chars."""
 
@@ -192,9 +197,9 @@ def upload_document(file, actor: UserContext):
     if not document_name.lower().endswith(".pdf"):
         raise HTTPException(status_code=415, detail="Only PDF files are supported.")
 
-    data = _read_upload(file)
+    data = _read_upload(file) #it stores binary data of the uploaded PDF file in the variable 
     pdf = read_pdf(data, extract_text=False)  # size, %PDF- header, readable, not password-protected
-    content_hash = sha256_hex(data)
+    content_hash = sha256_hex(data) #it applies the SHA-256 hash function to the binary data of the uploaded PDF file and returns the resulting hash value as a hexadecimal string. 
 
     # Same bytes already registered by an earlier upload?
     duplicate = documents_collection.find_one(
@@ -212,7 +217,7 @@ def upload_document(file, actor: UserContext):
     object_key = storage_service.object_key_for(document_uuid)
     now = datetime.now(timezone.utc)
 
-    storage_service.put_pdf(object_key, data, content_hash)
+    storage_service.put_pdf(object_key, data, content_hash)#The original PDF is now stored in your private Cloudflare R2 bucket.
 
     document = {
         "document_uuid": document_uuid,

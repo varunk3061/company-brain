@@ -134,7 +134,7 @@ def rerank(question: str, chunks: list) -> list | None:
     if not chunks:
         return []
 
-    texts = [str(chunk.get("text") or "") for chunk in chunks]
+    texts = [str(chunk.get("text") or "") for chunk in chunks] #extract the text from each chunks
 
     for name, score in _providers():
         try:
@@ -147,9 +147,20 @@ def rerank(question: str, chunks: list) -> list | None:
             {**chunk, "rerank_score": value, "rerank_provider": name}
             for chunk, value in zip(chunks, scores)
         ]
+        # chunks = [CHUNK_101, CHUNK_102, CHUNK_103]
+        #  scores = [0.90, 0.15, 0.85]
+        #zip(chunks, scores) = [(CHUNK_101, 0.90), (CHUNK_102, 0.15), (CHUNK_103, 0.85)]
+
+#         {
+#     "chunk_uuid": "101",
+#     "text": "Employees receive 20 days of annual leave.",
+#     "rerank_score": 0.90,
+#     "rerank_provider": "nvidia"
+# }
         reranked.sort(key=lambda chunk: chunk["rerank_score"], reverse=True)
         return reranked
 
+        
     return None
 
 

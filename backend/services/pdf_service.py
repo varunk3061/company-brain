@@ -104,7 +104,7 @@ def read_pdf(data: bytes, extract_text: bool = True) -> PdfContent:
     if extract_text:
         for page in reader.pages:
             try:
-                pages.append(page.extract_text() or "")
+                pages.append(page.extract_text() or "") #takes one page at a time and extracts the text from it.extract_text() is inbulit function
             except Exception as exc:
                 logger.warning("Could not extract text from a page: %s", exc)
                 pages.append("")

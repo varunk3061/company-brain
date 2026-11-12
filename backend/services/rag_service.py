@@ -39,7 +39,7 @@ def chunk_access_fields(document: dict) -> dict:
     return {
         "classification": document.get("classification", "restricted"),
         "department_code": document.get("department_code"),
-        "access": access,
+        "access": access, #access is a dictionary that contains the access permissions for the document. 
         "allowed_roles": access.get("roles", []),
         "allowed_departments": access.get("departments", []),
         "allowed_users": access.get("users", []),
@@ -47,7 +47,7 @@ def chunk_access_fields(document: dict) -> dict:
 
 #-------------------------------------------------------------------------------------------------------------
 
-def load_document_bytes(document: dict) -> tuple:
+def load_document_bytes(document: dict) -> tuple: #fetch the pdf from r2
     """Return a document's bytes and file name from private R2 storage."""
 
     object_key = document.get("object_key")
@@ -118,8 +118,9 @@ def _mark_failed(document_uuid: str, reason: str) -> None:
 
 #-------------------------------------------------------------------------------------------------------------
 
-def ingest_document(document: Union[dict, str]):
+def ingest_document(document: Union[dict, str]): #it accepts either a document dictionary or a document UUID string as input. 
     """
+    it uses the document's UUID to retrieve
     Process a PDF document:
     1. Load its bytes from private R2 storage.
     2. Check whether the content has changed.
@@ -128,14 +129,14 @@ def ingest_document(document: Union[dict, str]):
     5. Synchronize the document and chunks with Neo4j.
     """
 
-    if isinstance(document, str):
+    if isinstance(document, str): #checks if the input is a string
         found = documents_collection.find_one({"document_uuid": document})
         if not found:
             raise HTTPException(
                 status_code=404,
                 detail=f"Document '{document}' was not found in the database.",
             )
-        document = dict(found)
+        document = dict(found) #convert the found document from the database into a dictionary format
 
     document_uuid = document.get("document_uuid")
 
@@ -151,14 +152,14 @@ def ingest_document(document: Union[dict, str]):
     )
 
     if existing_document:
-        document = {**document, **existing_document}
+        document = {**document, **existing_document}#It merges two dictionaries. checks the new document dictionary with the existing one from the database, giving priority to the existing document's
 
-    data, file_name = load_document_bytes(document)
-    file_hash = sha256_hex(data)
-    document["file_hash"] = file_hash
+    data, file_name = load_document_bytes(document) #fetches the PDF bytes and file name from private R2 storage 
+    file_hash = sha256_hex(data) #bytes of pdf are hashed using SHA-256
+    document["file_hash"] = file_hash #it checks the documet file hash with the existing one in the database 
 
     # Even if the file is unchanged, synchronize its existing MongoDB chunks to Neo4j.
-    if (
+    if (#Check whether ingestion is already completed
         existing_document
         and existing_document.get("file_hash") == file_hash
         and existing_document.get("status") == "completed"
@@ -193,7 +194,7 @@ def ingest_document(document: Union[dict, str]):
             length_function=len,
         )
 
-        # Page numbers are 1-based, as shown to users in citations.
+        # Page numbers are 1-based, create the langchain Document objects with metadata for each page.
         split_chunks = splitter.create_documents(
             content.pages,
             metadatas=[{"page": index + 1} for index in range(len(content.pages))],
@@ -204,6 +205,11 @@ def ingest_document(document: Union[dict, str]):
             for chunk in split_chunks
             if chunk.page_content.strip()
         ]
+        # pieces = [
+        #     ("Employees must follow company policies...", 1),
+        #     ("Leave applications must be submitted...", 1),
+        #     ("The HR department manages employee records...", 2)
+        # ]
 
         if not pieces:
             raise HTTPException(
@@ -212,13 +218,13 @@ def ingest_document(document: Union[dict, str]):
             )
 
         # One batched call is much faster than embedding chunk by chunk.
-        vectors = get_embedding().embed_documents([text for text, _ in pieces])
+        vectors = get_embedding().embed_documents([text for text, _ in pieces]) 
 
         access_fields = chunk_access_fields(document)
         created_at = datetime.now(timezone.utc)
         source_name = document.get("document_name") or file_name
 
-        chunk_records = [
+        chunk_records = [ #it is list comprehension that creates a list of dictionaries, where each dictionary represents a chunk of text extracted from the PDF document
             {
                 "chunk_uuid": str(uuid4()),
                 "document_uuid": document_uuid,
@@ -245,12 +251,12 @@ def ingest_document(document: Union[dict, str]):
                     "ingestion_error": None,
                     "updated_at": created_at,
                 },
-                "$setOnInsert": {
+                "$setOnInsert": { #These fields are set only if MongoDB creates a new document.
                     "document_uuid": document_uuid,
                     "created_at": created_at,
                 },
             },
-            upsert=True,
+            upsert=True, #If the document exists → update it.If the document doesn't exist → insert a new one.
         )
 
         # Replace the previous chunks only after extraction and embedding both succeeded.

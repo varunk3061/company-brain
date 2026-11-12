@@ -79,6 +79,9 @@ def _build_prompt(batch: list) -> str:
         f'<chunk id="{number}">\n'
         f'{str(chunk.get("text", ""))[:MAX_CHARS_PER_CHUNK]}\n'
         f"</chunk>"
+        # <chunk id="1">
+        #     Rahul Sharma works in Finance Department.
+        #     </chunk>
         for number, chunk in enumerate(batch, start=1)
     )
 
@@ -88,7 +91,24 @@ def _build_prompt(batch: list) -> str:
         chunks=chunk_text,
     )
 
-
+# {
+#   "chunks": [
+#     {
+#       "chunk_uuid": "1",
+#       "entities": [
+#         {"name": "Rahul Sharma", "type": "Person"},
+#         {"name": "Finance Department", "type": "Department"}
+#       ],
+#       "relations": [
+#         {
+#           "from": "Rahul Sharma",
+#           "type": "WORKS_IN",
+#           "to": "Finance Department"
+#         }
+#       ]
+#     }
+#   ]
+# }
 def _parse_response(text: str, id_map:dict) -> tuple:
     """Turn the LLM's JSON into clean entity and relation lists. Bad items are skipped."""
 
@@ -96,7 +116,7 @@ def _parse_response(text: str, id_map:dict) -> tuple:
     text = text.strip()
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
 
-    data = json.loads(text)
+    data = json.loads(text) #converts the JSON string into a Python dictionary 
 
     entities = []
     relations = []
@@ -110,7 +130,12 @@ def _parse_response(text: str, id_map:dict) -> tuple:
             continue
 
         chunk_entity_keys = set()
+        #         {
+        #     "name": "Finance Department",
+        #     "type": "Department"
+        # }
 
+        #name=finance department, type=department, key=finance department
         for entity in item.get("entities", []):
             name = str(entity.get("name", "")).strip()
             entity_type = entity.get("type")
