@@ -15,4 +15,4 @@ pypdf
 neo4j
 boto3
 langchain-openai
-mcp[cli]
+mcp[cli]<2
