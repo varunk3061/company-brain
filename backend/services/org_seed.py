@@ -26,8 +26,8 @@ ROLES = [
     ("SYSTEM_ADMIN", "System Administrator", "EXEC", "internal", ADMIN_PERMS),
     ("TALENT_ACQUISITION", "Talent Acquisition Specialist", "HR", "internal", []),
     ("HR_GENERALIST", "HR Generalist", "HR", "internal", []),
-    ("HR_OPERATIONS", "HR Operations Specialist", "HR", "confidential", []),
-    ("HR_BUSINESS_PARTNER", "HR Business Partner", "HR", "confidential", APPROVER),
+    ("HR_OPERATIONS", "HR Operations Specialist", "HR", "confidential", ["sensitive.pii.read"]),
+    ("HR_BUSINESS_PARTNER", "HR Business Partner", "HR", "confidential", APPROVER + ["sensitive.pii.read", "sensitive.compensation.read"]),
     ("DEVELOPER", "Developer", "IT", "internal", []),
     ("IT_MANAGER", "IT Manager", "IT", "confidential", APPROVER),  # not in the org chart; added for the existing IT manager
     ("QA_ENGINEER", "QA Engineer", "IT", "internal", []),
@@ -35,11 +35,11 @@ ROLES = [
     ("SALES_MANAGER", "Sales Manager", "SALES", "confidential", APPROVER),
     ("SALES_DEV_REP", "Sales Development Representative", "SALES", "internal", []),
     ("RELATIONSHIP_MANAGER", "Relationship Manager", "SALES", "internal", []),
-    ("ACCOUNTING_MANAGER", "Accounting Manager", "FIN", "confidential", APPROVER),
-    ("FINANCIAL_ANALYST", "Financial Analyst", "FIN", "confidential", []),
-    ("PAYROLL_SPECIALIST", "Payroll Specialist", "FIN", "confidential", []),
-    ("HEAD_OF_LEGAL", "Head of Legal", "LEGAL", "restricted", APPROVER),
-    ("LEGAL_COUNSEL", "Legal Counsel / Contracts Specialist", "LEGAL", "confidential", []),
+    ("ACCOUNTING_MANAGER", "Accounting Manager", "FIN", "confidential", APPROVER + ["sensitive.financial.read"]),
+    ("FINANCIAL_ANALYST", "Financial Analyst", "FIN", "confidential", ["sensitive.financial.read"]),
+    ("PAYROLL_SPECIALIST", "Payroll Specialist", "FIN", "confidential", ["sensitive.pii.read", "sensitive.compensation.read", "sensitive.financial.read"]),
+    ("HEAD_OF_LEGAL", "Head of Legal", "LEGAL", "restricted", APPROVER + ["sensitive.legal.read"]),
+    ("LEGAL_COUNSEL", "Legal Counsel / Contracts Specialist", "LEGAL", "confidential", ["sensitive.legal.read"]),
     ("COMPLIANCE_ANALYST", "Compliance Analyst", "LEGAL", "confidential", []),
 ]
 

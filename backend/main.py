@@ -23,7 +23,7 @@ from database.neo4j_connection import (
 )
 from services.graph_service import initialize_graph
 
-from MCP.server import create_mcp_app
+
 from MCP.server import create_mcp_app, mcp
 
 from routes.audit_routes import router as audit_router

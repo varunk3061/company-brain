@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 Classification = Literal["public", "internal", "confidential", "restricted"]
 
 Permission = Literal[
-    "users.manage", "org.manage", "documents.manage", "documents.approve", "audit.read"
+    "users.manage", "org.manage", "documents.manage", "documents.approve", "audit.read", "sensitive.pii.read", "sensitive.compensation.read", "sensitive.financial.read", "sensitive.legal.read"
 ]
 
 ActiveStatus = Literal["active", "inactive"]

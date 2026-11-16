@@ -7,6 +7,8 @@ from collections import defaultdict
 
 from fastapi import HTTPException
 
+from services.masking import mask_chunks_for_user
+
 from database.connection import documents_chunk_collection
 from database.neo4j_connection import (
     get_neo4j_driver,
@@ -721,7 +723,8 @@ def retrieve_relevant_chunks(
 
         entity_chunks = sorted(entity_chunks, key=lambda c: c.get("score", 0), reverse=True)
         all_candidates = _fuse_ranked_lists(vector_chunks, keyword_chunks, graph_chunks, entity_chunks)
-
+        # Create safe copies before any reranker or LLM-facing path sees chunk text.
+        all_candidates, _ = mask_chunks_for_user(all_candidates, ctx)
         if not all_candidates:
             return []
 

@@ -2,7 +2,7 @@
 from MCP.auth import CompanyBrainTokenVerifier
 from mcp.server.fastmcp import FastMCP
 from MCP.tool import register_tools
-from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.settings import AuthSettings #inbuilt auth settings for mcp
 
 mcp = FastMCP(
     name="Company Brain",
